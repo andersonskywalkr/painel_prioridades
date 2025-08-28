@@ -1,6 +1,7 @@
 import pandas as pd
 import psycopg2
 import os
+from datetime import datetime
 
 # Configurações de Conexão com o Banco de Dados
 DB_HOST = "localhost"
@@ -25,18 +26,18 @@ def migrar_dados_pedidos():
         cur = conn.cursor()
 
         # 1. Obter o ID do status "Aguardando Montagem" do banco de dados
-        status_aguardando_montagem = "Aguardando montagem"
-        print(f"Buscando o ID para o status: '{status_aguardando_montagem}'...")
-        cur.execute("SELECT id FROM status_td WHERE nome_status = %s;", (status_aguardando_montagem,))
+        status_aguardando_chegada = "Aguardando Chegada"
+        print(f"Buscando o ID para o status: '{status_aguardando_chegada}'...")
+        cur.execute("SELECT id FROM status_td WHERE nome_status = %s;", (status_aguardando_chegada,))
         result = cur.fetchone()
         
         if result is None:
-            print(f"Erro: O status '{status_aguardando_montagem}' não foi encontrado na tabela status_td.")
+            print(f"Erro: O status '{status_aguardando_chegada}' não foi encontrado na tabela status_td.")
             print("Por favor, certifique-se de ter inserido este status no banco de dados primeiro.")
             return
             
         status_id = result[0]
-        print(f"ID para '{status_aguardando_montagem}' encontrado: {status_id}")
+        print(f"ID para '{status_aguardando_chegada}' encontrado: {status_id}")
 
         # 2. Ler os dados da planilha Excel
         print("Lendo dados da planilha Excel...")
@@ -61,25 +62,19 @@ def migrar_dados_pedidos():
         
         # Opcional, mas útil para o erro 'NaT' se persistir:
         # Imprime a primeira linha para verificar o formato dos dados
-        print("Dados da primeira linha (após o processamento):")
-        print(df_excel.iloc[0])
+        # print("Dados da primeira linha (após o processamento):")
+        # print(df_excel.iloc[0])
 
         # 5. Inserir os dados na tabela pedidos_tb
         print("Inserindo dados na tabela pedidos_tb...")
         for index, row in df_excel.iterrows():
-            # AQUI ESTÁ A NOVA CORREÇÃO:
-            # Converte a data para um formato que o PostgreSQL entende
-            # e lida com os valores NaT explicitamente
-            try:
-                data_criacao_valor = pd.to_datetime(row['data_criacao'])
-                if pd.isna(data_criacao_valor):
-                    data_criacao_valor = None
-            except Exception:
-                data_criacao_valor = None
+
+            data_criacao = datetime.now()
+            perfil_altecao = "Importada Planilha"
 
             query = """
-            INSERT INTO pedidos_tb (codigo_pedido, equipamento, pv, descricao_servico, status_id, data_criacao, quantidade, prioridade)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO pedidos_tb (codigo_pedido, equipamento, pv, descricao_servico, status_id, data_criacao, quantidade, prioridade, perfil_alteracao)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (codigo_pedido) DO UPDATE
             SET
                 equipamento = EXCLUDED.equipamento,
@@ -88,7 +83,8 @@ def migrar_dados_pedidos():
                 status_id = EXCLUDED.status_id,
                 data_criacao = EXCLUDED.data_criacao,
                 quantidade = EXCLUDED.quantidade,
-                prioridade = EXCLUDED.prioridade;
+                prioridade = EXCLUDED.prioridade,
+                perfil_alteracao = EXCLUDED.perfil_alteracao;
             """
             cur.execute(query, (
                 row['codigo_pedido'],
@@ -96,9 +92,10 @@ def migrar_dados_pedidos():
                 row['pv'],
                 row['descricao_servico'],
                 status_id,
-                data_criacao_valor,
+                data_criacao,
                 row['quantidade'],
-                row['prioridade']
+                row['prioridade'],
+                perfil_altecao
             ))
 
         conn.commit()
