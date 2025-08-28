@@ -9,7 +9,7 @@ import numpy as np
 import time
 import traceback
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                               QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton)
+                             QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton)
 from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtCore import QTimer, Qt
 
@@ -25,7 +25,7 @@ DB_PASSWORD = "2025"
 
 # --- CONSTANTES DE COLUNAS E STATUS (VERSÃO ORIGINAL RESTAURADA) ---
 COLUNA_PEDIDO_ID, COLUNA_PV, COLUNA_SERVICO, COLUNA_STATUS, COLUNA_DATA_STATUS, COLUNA_QTD, COLUNA_EQUIPAMENTO, COLUNA_PRIORIDADE = \
-   'id', 'pv', 'descricao_servico', 'nome_status', 'data_criacao', 'quantidade', 'equipamento', 'prioridade'
+    'id', 'pv', 'descricao_servico', 'nome_status', 'data_criacao', 'quantidade', 'equipamento', 'prioridade'
     
 STATUS_PENDENTE, STATUS_BACKLOG, STATUS_AGUARDANDO_CHEGADA, STATUS_EM_MONTAGEM, STATUS_CONCLUIDO, STATUS_CANCELADO, STATUS_URGENTE = \
     'Pendente', 'Backlog', 'Aguardando Chegada', 'Em Montagem', 'Concluído', 'Cancelado', 'Urgente'
@@ -82,7 +82,6 @@ def carregar_dados():
 
     if df.empty:
         print("AVISO: O banco de dados não retornou nenhum pedido.")
-        # CORREÇÃO CRÍTICA: Previne o erro 'KeyError' ao criar um DataFrame vazio com a estrutura de colunas correta.
         expected_columns = [
             COLUNA_PEDIDO_ID, COLUNA_EQUIPAMENTO, COLUNA_PV, COLUNA_SERVICO,
             COLUNA_STATUS, COLUNA_DATA_STATUS, COLUNA_QTD, COLUNA_PRIORIDADE
@@ -202,9 +201,20 @@ class PainelMtec(QMainWindow):
         self.setWindowTitle("Painel de Produção MTEC"); self.setGeometry(100, 100, 1920, 1080);
         self.setStyleSheet(STYLESHEET)
         
+        # --- Definição de fontes como variáveis de instância ---
+        self.font_titulo = QFont("Inter", self.scale(16), QFont.Bold)
+        self.font_item = QFont("Inter", self.scale(10))
+        self.font_contador = QFont("Inter", self.scale(9))
+        self.font_total = QFont("Inter", self.scale(9))
+        self.font_metrica_titulo = QFont("Inter", self.scale(12), QFont.Bold)
+        self.font_metrica_valor = QFont("Inter", self.scale(32), QFont.Bold)
+        self.font_kpi_titulo = QFont("Inter", self.scale(11), QFont.Bold)
+        self.font_kpi_valor = QFont("Inter", self.scale(12), QFont.Bold)
+
         self.main_container = QWidget(); self.error_container = QWidget(); self.is_showing_error = False
         
         self.setup_ui()
+        self.create_persistent_widgets() # NOVO: Cria os widgets que serão atualizados
         self.setup_online_timer()
         self.atualizar_dados_e_ui()
 
@@ -235,9 +245,8 @@ class PainelMtec(QMainWindow):
         self.notification_label = QLabel(self); self.notification_label.setObjectName("NotificationLabel"); self.notification_label.setWordWrap(True); self.notification_label.hide()
 
     def setup_ui_columns(self):
-        self.prioridades_layout = QVBoxLayout()
-        self.prioridades_layout.setSpacing(self.scale(15))
-
+        # Configura os layouts para cada coluna
+        self.prioridades_layout = QVBoxLayout(); self.prioridades_layout.setSpacing(self.scale(15))
         self.backlog_layout = QVBoxLayout()
         self.aguardando_chegada_layout = QVBoxLayout()
         self.pendentes_layout = QVBoxLayout()
@@ -266,21 +275,123 @@ class PainelMtec(QMainWindow):
         self.metricas_layout = QVBoxLayout(); self.grafico_layout = QVBoxLayout(); self.kpi_layout = QVBoxLayout()
         self.dashboard_layout.addLayout(self.metricas_layout, 1); self.dashboard_layout.addLayout(self.grafico_layout, 2); self.dashboard_layout.addStretch(1); self.dashboard_layout.addLayout(self.kpi_layout, 1)
 
+    def create_persistent_widgets(self):
+        """Cria todos os widgets dinâmicos uma única vez para evitar recriação."""
+        # --- Listas para armazenar referências aos widgets ---
+        self.priority_cards = []
+        self.em_montagem_labels, self.pendentes_labels, self.backlog_labels, self.aguardando_chegada_labels = [], [], [], []
+        self.concluidos_labels, self.cancelados_labels = [], []
+        
+        # --- Criar Títulos (uma única vez) ---
+        self.prioridades_layout.addWidget(self.criar_titulo("PRIORIDADES", "PrioridadesTitle"))
+        self.em_montagem_layout.addWidget(self.criar_titulo("EM MONTAGEM FORA DA PRIORIDADE", "EmMontagemTitle"))
+        self.pendentes_layout.addWidget(self.criar_titulo("PENDENTES", "PendentesTitle"))
+        self.backlog_layout.addWidget(self.criar_titulo("BACKLOG", "BacklogTitle"))
+        self.aguardando_chegada_layout.addWidget(self.criar_titulo("AGUARDANDO CHEGADA", "AguardandoChegadaTitle"))
+        self.concluidos_layout.addWidget(self.criar_titulo("CONCLUÍDOS DO DIA", "ConcluidosTitle"))
+        self.cancelados_layout.addWidget(self.criar_titulo("CANCELADOS DO DIA", "CanceladosTitle"))
+
+        # --- Criar Cards de Prioridade (placeholders) ---
+        for _ in range(4):
+            card = QFrame(); card.setObjectName("Card"); card_layout = QVBoxLayout(card); card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed); card.setFixedHeight(self.scale(120))
+            pedido_label = QLabel(); pedido_label.setFont(QFont("Inter", self.scale(12), QFont.Bold)); pedido_label.setObjectName("CardTitle")
+            status_label = QLabel(); status_label.setFont(QFont("Inter", self.scale(9)))
+            servico_label = QLabel(); servico_label.setFont(QFont("Inter", self.scale(9))); servico_label.setWordWrap(True)
+            equipamento_label = QLabel(); equipamento_label.setFont(QFont("Inter", self.scale(9)))
+            qtd_label = QLabel(); pv_label_card = QLabel()
+            info_layout = QHBoxLayout(); info_layout.addWidget(qtd_label); info_layout.addStretch(); info_layout.addWidget(pv_label_card)
+            
+            card_layout.addWidget(pedido_label); card_layout.addWidget(status_label); card_layout.addWidget(equipamento_label); card_layout.addWidget(servico_label); card_layout.addLayout(info_layout)
+            
+            refs = {'frame': card, 'pedido': pedido_label, 'status': status_label, 'servico': servico_label, 'equipamento': equipamento_label, 'qtd': qtd_label, 'pv_card': pv_label_card}
+            self.priority_cards.append(refs)
+            self.prioridades_layout.addWidget(card)
+            card.hide()
+        self.prioridades_layout.addStretch()
+
+        # --- Criar Labels para Listas Verticais (placeholders) ---
+        self.em_montagem_counter = self.create_list_widgets(self.em_montagem_layout, self.em_montagem_labels, 5)
+        self.pendentes_counter = self.create_list_widgets(self.pendentes_layout, self.pendentes_labels, 5)
+        self.backlog_counter = self.create_list_widgets(self.backlog_layout, self.backlog_labels, 5)
+        self.aguardando_chegada_counter = self.create_list_widgets(self.aguardando_chegada_layout, self.aguardando_chegada_labels, 5)
+        
+        # --- Criar Labels para Listas Laterais (placeholders) ---
+        self.concluidos_counter, self.concluidos_total = self.create_side_list_widgets(self.concluidos_layout, self.concluidos_labels, 5)
+        self.cancelados_counter, self.cancelados_total = self.create_side_list_widgets(self.cancelados_layout, self.cancelados_labels, 5)
+
+        # --- Criar Widgets do Dashboard ---
+        self.create_dashboard_widgets()
+
+    def create_list_widgets(self, layout, label_list, count):
+        """Função auxiliar para criar labels de uma lista vertical."""
+        for _ in range(count):
+            label = QLabel(); label.setFont(self.font_item); label.hide()
+            layout.addWidget(label)
+            label_list.append(label)
+        counter = QLabel(); counter.setObjectName("CounterLabel"); counter.setFont(self.font_contador); counter.hide()
+        layout.addWidget(counter)
+        layout.addStretch()
+        return counter
+        
+    def create_side_list_widgets(self, layout, label_list, count):
+        """Função auxiliar para criar labels de uma lista lateral."""
+        for _ in range(count):
+            label = QLabel(); label.setFont(self.font_item); label.hide()
+            layout.addWidget(label)
+            label_list.append(label)
+        counter = QLabel(); counter.setObjectName("CounterLabel"); counter.setFont(self.font_contador); counter.hide()
+        layout.addWidget(counter)
+        total = QLabel(); total.setObjectName("TotalLabel"); total.setFont(self.font_total); total.hide()
+        layout.addWidget(total)
+        layout.addStretch(1)
+        return counter, total
+
+    def create_dashboard_widgets(self):
+        """Cria os widgets do dashboard uma única vez."""
+        # Métricas
+        self.metricas_layout.addWidget(self.criar_titulo("Total Concluído no Mês", "MetricaTitle"))
+        self.total_mes_valor = QLabel(); self.total_mes_valor.setObjectName("MetricaValue"); self.total_mes_valor.setFont(self.font_metrica_valor)
+        self.metricas_layout.addWidget(self.total_mes_valor)
+        self.metricas_layout.addStretch(1)
+        self.metricas_layout.addWidget(self.criar_titulo("Média Diária no Mês", "MetricaTitle"))
+        self.media_diaria_valor = QLabel(); self.media_diaria_valor.setObjectName("MetricaValue"); self.media_diaria_valor.setFont(self.font_metrica_valor)
+        self.metricas_layout.addWidget(self.media_diaria_valor)
+        self.metricas_layout.addStretch(1)
+
+        # Gráfico
+        self.grafico_layout.addWidget(self.criar_titulo(f"Desempenho Semanal (Meta: {META_SEMANAL} máq.)", ""))
+        self.weekly_progress_widgets = []
+        for _ in range(4): # 4 semanas
+            label_semana = QLabel(); label_semana.setFont(QFont("Inter", self.scale(10)))
+            progress_bar = QProgressBar(); progress_bar.setRange(0, META_SEMANAL); progress_bar.setTextVisible(False); progress_bar.setFixedHeight(self.scale(18)); progress_bar.setMaximumWidth(self.scale(550))
+            self.grafico_layout.addWidget(label_semana)
+            self.grafico_layout.addWidget(progress_bar)
+            refs = {'label': label_semana, 'bar': progress_bar}
+            self.weekly_progress_widgets.append(refs)
+            label_semana.hide(); progress_bar.hide()
+        self.grafico_layout.addStretch()
+
+        # KPIs
+        self.kpi_layout.addWidget(self.criar_titulo("Recorde Diário no Mês", "KpiTitle"))
+        self.recorde_valor = QLabel(); self.recorde_valor.setObjectName("KpiValue"); self.recorde_valor.setFont(self.font_kpi_valor)
+        self.kpi_layout.addWidget(self.recorde_valor)
+        self.kpi_layout.addStretch()
+
+    def criar_titulo(self, texto, object_name):
+        label = QLabel(f"<b>{texto}</b>"); label.setObjectName(object_name); label.setFont(self.font_titulo); label.setProperty("class", "SectionTitle")
+        return label
+        
     def setup_online_timer(self):
-        """Configura um timer para atualizações periódicas no modo online."""
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.atualizar_dados_e_ui)
-        self.update_timer.start(10000) # 1000ms = 1s
-        print("Modo online: O painel será atualizado a cada minuto.")
+        self.update_timer.start(10000) # 10 segundos
+        print("Modo online: O painel será atualizado a cada 10 segundos.")
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Handles key press events for the main window."""
         if event.key() == Qt.Key_F11:
             if self.isFullScreen():
-                print("Saindo do modo de tela cheia (F11 pressionado).")
                 self.showMaximized()
             else:
-                print("Entrando no modo de tela cheia (F11 pressionado).")
                 self.showFullScreen()
         super().keyPressEvent(event)
 
@@ -291,11 +402,11 @@ class PainelMtec(QMainWindow):
             
             if self.is_showing_error: self.clear_error_message()
             
-            self.desenhar_colunas(df_principal, df_concluidos, df_cancelados, totais_concluidos, totais_cancelados)
+            self.update_colunas(df_principal, df_concluidos, df_cancelados, totais_concluidos, totais_cancelados)
             
             metricas = calcular_metricas_dashboard(df_full)
             dados_grafico = calcular_dados_grafico(df_full)
-            self.desenhar_dashboard(metricas, dados_grafico)
+            self.update_dashboard(metricas, dados_grafico)
             
             print("--- CICLO DE ATUALIZAÇÃO CONCLUÍDO ---")
         except Exception as e:
@@ -311,36 +422,11 @@ class PainelMtec(QMainWindow):
     def clear_error_message(self):
         self.error_container.hide(); self.main_container.show(); self.is_showing_error = False
     
-    def criar_titulo(self, texto, object_name, font):
-        label = QLabel(f"<b>{texto}</b>"); label.setObjectName(object_name); label.setFont(font); label.setProperty("class", "SectionTitle")
-        return label
-    
-    def limpar_layout(self, layout):
-        if layout is not None:
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget() is not None:
-                    item.widget().deleteLater()
-                elif item.layout() is not None:
-                    self.limpar_layout(item.layout())
-
-    def desenhar_colunas(self, df_principal, df_concluidos, df_cancelados, totais_concluidos, totais_cancelados):
-        # CORREÇÃO: Limpeza centralizada para garantir que a UI sempre atualize
-        layouts_para_limpar = [self.prioridades_layout, self.em_montagem_layout, self.pendentes_layout, 
-                               self.backlog_layout, self.aguardando_chegada_layout, 
-                               self.concluidos_layout, self.cancelados_layout]
-        for layout in layouts_para_limpar: self.limpar_layout(layout)
-
-        font_titulo = QFont("Inter", self.scale(16), QFont.Bold)
-        font_item = QFont("Inter", self.scale(10)) 
-        font_contador = QFont("Inter", self.scale(9))
-        font_total = QFont("Inter", self.scale(9))
-
-        # CORREÇÃO: Filtragem case-insensitive para maior robustez
+    def update_colunas(self, df_principal, df_concluidos, df_cancelados, totais_concluidos, totais_cancelados):
         df_prioridades = df_principal[df_principal[COLUNA_STATUS].str.lower().isin([STATUS_BACKLOG.lower(), STATUS_EM_MONTAGEM.lower(), STATUS_URGENTE.lower()])]
         pedidos_em_prioridade_ids = df_prioridades.head(4)[COLUNA_PEDIDO_ID].tolist()
 
-        self.desenhar_cards_prioridade(self.prioridades_layout, df_prioridades, font_titulo)
+        self.update_cards_prioridade(df_prioridades)
 
         df_em_montagem_base = df_principal[df_principal[COLUNA_STATUS].str.lower() == STATUS_EM_MONTAGEM.lower()]
         df_em_montagem_filtrado = df_em_montagem_base[~df_em_montagem_base[COLUNA_PEDIDO_ID].isin(pedidos_em_prioridade_ids)]
@@ -349,178 +435,129 @@ class PainelMtec(QMainWindow):
             self.em_montagem_container.hide()
         else:
             self.em_montagem_container.show()
-            self.desenhar_lista_vertical(self.em_montagem_layout, df_em_montagem_filtrado, "EM MONTAGEM FORA DA PRIORIDADE", font_titulo, font_item, font_contador)
+            self.update_lista_vertical(df_em_montagem_filtrado, self.em_montagem_labels, self.em_montagem_counter)
 
         df_pendentes = df_principal[df_principal[COLUNA_STATUS].str.lower() == STATUS_PENDENTE.lower()]
-        self.desenhar_lista_vertical(self.pendentes_layout, df_pendentes, "PENDENTES", font_titulo, font_item, font_contador)
+        self.update_lista_vertical(df_pendentes, self.pendentes_labels, self.pendentes_counter)
 
         df_backlog_base = df_principal[df_principal[COLUNA_STATUS].str.lower() == STATUS_BACKLOG.lower()]
         df_backlog_filtrado = df_backlog_base[~df_backlog_base[COLUNA_PEDIDO_ID].isin(pedidos_em_prioridade_ids)]
-        self.desenhar_lista_vertical(self.backlog_layout, df_backlog_filtrado, "BACKLOG", font_titulo, font_item, font_contador)
+        self.update_lista_vertical(df_backlog_filtrado, self.backlog_labels, self.backlog_counter)
 
         df_aguardando_chegada = df_principal[df_principal[COLUNA_STATUS].str.lower() == STATUS_AGUARDANDO_CHEGADA.lower()]
-        self.desenhar_lista_vertical(self.aguardando_chegada_layout, df_aguardando_chegada, "AGUARDANDO CHEGADA", font_titulo, font_item, font_contador)
+        self.update_lista_vertical(df_aguardando_chegada, self.aguardando_chegada_labels, self.aguardando_chegada_counter)
 
-        self.desenhar_lista_lateral(self.concluidos_layout, df_concluidos, "CONCLUÍDOS DO DIA", font_titulo, font_item, font_contador, font_total, totais_concluidos, limit=5)
-        self.desenhar_lista_lateral(self.cancelados_layout, df_cancelados, "CANCELADOS DO DIA", font_titulo, font_item, font_contador, font_total, totais_cancelados, limit=5)
+        self.update_lista_lateral(df_concluidos, self.concluidos_labels, self.concluidos_counter, self.concluidos_total, totais_concluidos)
+        self.update_lista_lateral(df_cancelados, self.cancelados_labels, self.cancelados_counter, self.cancelados_total, totais_cancelados)
 
-    def desenhar_cards_prioridade(self, layout, df, font_titulo):
-        layout.addWidget(self.criar_titulo("PRIORIDADES", "PrioridadesTitle", font_titulo))
+    def update_cards_prioridade(self, df):
         if df.empty:
-            layout.addWidget(QLabel("Nenhum pedido de alta prioridade.")); layout.addStretch()
+            for card_ref in self.priority_cards:
+                card_ref['frame'].hide()
             return
         
-        for _, row in df.head(4).iterrows():
-            card = QFrame(); card.setObjectName("Card"); card_layout = QVBoxLayout(card); card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed); card.setFixedHeight(self.scale(120))
-            
-            font_label = QFont("Inter", self.scale(12), QFont.Bold)
-            font_sub = QFont("Inter", self.scale(9))
-            
-            pedido_label = QLabel(f"<b>PV: {row[COLUNA_PV]}</b> ({row['Prioridade_Display']}º Prioridade)"); pedido_label.setFont(font_label); pedido_label.setObjectName("CardTitle"); card_layout.addWidget(pedido_label)
-            status_label = QLabel(f"<font color='#BDBDBD'>Status: </font><span style='color: white; font-weight: bold;'>{row[COLUNA_STATUS]}</span>")
-            status_label.setObjectName(f"CardStatus_{row[COLUNA_STATUS].replace(' ', '').replace('ó', 'o')}")
-            status_label.setFont(font_sub)
-            
-            servico_label = QLabel(f"<font color='#BDBDBD'>Serviço: </font>{row[COLUNA_SERVICO]}"); servico_label.setFont(font_sub); servico_label.setWordWrap(True)
-            equipamento_label = QLabel(f"<font color='#BDBDBD'>Equipamento: </font>{row[COLUNA_EQUIPAMENTO]}"); equipamento_label.setFont(font_sub)
-            
-            info_layout = QHBoxLayout()
-            info_layout.addWidget(QLabel(f"<font color='#BDBDBD'><b>{row[COLUNA_QTD]}</b> máq.</font>")); info_layout.addStretch()
-            info_layout.addWidget(QLabel(f"<font color='#FF6600'>{row[COLUNA_PV]}</font>"))
-            
-            card_layout.addWidget(status_label); card_layout.addWidget(equipamento_label); card_layout.addWidget(servico_label); card_layout.addLayout(info_layout); layout.addWidget(card)
-        
-        layout.addStretch()
+        for i, (_, row) in enumerate(df.head(4).iterrows()):
+            card_ref = self.priority_cards[i]
+            card_ref['pedido'].setText(f"<b>PV: {row[COLUNA_PV]}</b> ({row['Prioridade_Display']}º Prioridade)")
+            card_ref['status'].setText(f"<font color='#BDBDBD'>Status: </font><span style='color: white; font-weight: bold;'>{row[COLUNA_STATUS]}</span>")
+            card_ref['servico'].setText(f"<font color='#BDBDBD'>Serviço: </font>{row[COLUNA_SERVICO]}")
+            card_ref['equipamento'].setText(f"<font color='#BDBDBD'>Equipamento: </font>{row[COLUNA_EQUIPAMENTO]}")
+            card_ref['qtd'].setText(f"<font color='#BDBDBD'><b>{row[COLUNA_QTD]}</b> máq.</font>")
+            card_ref['pv_card'].setText(f"<font color='#FF6600'>{row[COLUNA_PV]}</font>")
+            card_ref['frame'].show()
 
-    def desenhar_lista_vertical(self, layout, df, titulo_texto, font_titulo, font_item, font_contador):
-        object_name = f"{titulo_texto.replace(' ', '')}Title"
-        layout.addWidget(self.criar_titulo(titulo_texto, object_name, font_titulo))
+        # Esconde os cards não utilizados
+        for j in range(len(df.head(4)), len(self.priority_cards)):
+            self.priority_cards[j]['frame'].hide()
+
+    def update_lista_vertical(self, df, label_list, counter_label):
         if df.empty:
-            layout.addWidget(QLabel("Nenhum pedido.")); layout.addStretch()
+            for label in label_list: label.hide()
+            counter_label.hide()
             return
         
-        for _, row in df.head(5).iterrows():
-            texto = f"<b>PV: {row[COLUNA_PV]}</b> <font color='#FF6600'>({row[COLUNA_QTD]} máq.)</font>"
-            label = QLabel(texto); label.setFont(font_item); layout.addWidget(label)
+        for i, (_, row) in enumerate(df.head(len(label_list)).iterrows()):
+            label = label_list[i]
+            label.setText(f"<b>PV: {row[COLUNA_PV]}</b> <font color='#FF6600'>({row[COLUNA_QTD]} máq.)</font>")
+            label.show()
         
-        if len(df) > 5:
-            restantes = len(df) - 5
-            contador_label = QLabel(f"+{restantes} pedidos...")
-            contador_label.setObjectName("CounterLabel")
-            contador_label.setFont(font_contador)
-            layout.addWidget(contador_label)
-        layout.addStretch()
-    
-    def desenhar_lista_lateral(self, layout, df, titulo_texto, font_titulo, font_item, font_contador, font_total, totais, limit=5):
-        object_name = f"{titulo_texto.replace(' ', '')}Title"
-        layout.addWidget(self.criar_titulo(titulo_texto, object_name, font_titulo))
-        if df.empty: layout.addWidget(QLabel("Nenhum."))
+        for j in range(len(df.head(len(label_list))), len(label_list)):
+            label_list[j].hide()
+
+        if len(df) > len(label_list):
+            restantes = len(df) - len(label_list)
+            counter_label.setText(f"+{restantes} pedidos...")
+            counter_label.show()
         else:
-            df_display = df.head(limit) if limit is not None else df
-            for _, row in df_display.iterrows():
+            counter_label.hide()
+    
+    def update_lista_lateral(self, df, label_list, counter_label, total_label, totais):
+        if df.empty:
+            for label in label_list: label.hide()
+            counter_label.hide()
+        else:
+            for i, (_, row) in enumerate(df.head(len(label_list)).iterrows()):
+                label = label_list[i]
                 texto = f"<b>PV: {row[COLUNA_PV]}</b> <font color='#2ECC71'>({row[COLUNA_QTD]} máq.)</font>"
-                label = QLabel(texto); label.setFont(font_item); layout.addWidget(label)
-            if limit is not None and len(df) > limit:
-                restantes = len(df) - limit; contador_label = QLabel(f"+{restantes}..."); contador_label.setObjectName("CounterLabel"); contador_label.setFont(font_contador); layout.addWidget(contador_label)
+                label.setText(texto); label.show()
+
+            for j in range(len(df.head(len(label_list))), len(label_list)):
+                label_list[j].hide()
+            
+            if len(df) > len(label_list):
+                restantes = len(df) - len(label_list)
+                counter_label.setText(f"+{restantes}..."); counter_label.show()
+            else:
+                counter_label.hide()
 
         teravix, pv, total, teravix_qtd, pv_qtd, total_qtd = totais
-        
         texto_total = (f"<font color='#FF6600'>TERAVIX:</font> {teravix} ({teravix_qtd})<br>"
                        f"<font color='#FF6600'>PV:</font> {pv} ({pv_qtd})<br>"
                        f"<b><font color='#3498DB'>TOTAL DIA:</font></b> <b>{total} ({total_qtd})</b>")
+        total_label.setText(texto_total)
+        total_label.show()
 
-        total_label = QLabel(texto_total); total_label.setObjectName("TotalLabel"); total_label.setFont(font_total)
-        layout.addWidget(total_label)
-        layout.addStretch(1)
+    def update_dashboard(self, metricas, dados_grafico):
+        # Atualiza Métricas
+        self.total_mes_valor.setText(f"{metricas['total_mes_atual']:.0f} " \
+                                     f"<font color='#999' style='font-size:{self.scale(15)}px;'>({metricas['total_mes_atual_qtd']:.0f} máq.)</font>")
+        self.media_diaria_valor.setText(f"{metricas['media_diaria_atual']:.1f} " \
+                                        f"<font color='#999' style='font-size:{self.scale(15)}px;'>({metricas['media_diaria_qtd']:.1f} máq.)</font>")
 
-    def desenhar_dashboard(self, metricas, dados_grafico):
-        self.limpar_layout(self.metricas_layout)
-        self.limpar_layout(self.grafico_layout)
-        self.limpar_layout(self.kpi_layout)
-        
-        titulo_metrica_font = QFont("Inter", self.scale(12), QFont.Bold)
-        valor_metrica_font = QFont("Inter", self.scale(32), QFont.Bold)
-        
-        # --- Métricas ---
-        total_mes_titulo = QLabel("Total Concluído no Mês")
-        total_mes_titulo.setObjectName("MetricaTitle")
-        total_mes_titulo.setFont(titulo_metrica_font)
-
-        total_mes_valor_html = f"{metricas['total_mes_atual']:.0f} " \
-                               f"<font color='#999' style='font-size:{self.scale(15)}px;'>({metricas['total_mes_atual_qtd']:.0f} máq.)</font>"
-        total_mes_valor = QLabel(total_mes_valor_html)
-        total_mes_valor.setObjectName("MetricaValue")
-        total_mes_valor.setFont(valor_metrica_font)
-
-        media_diaria_titulo = QLabel("Média Diária no Mês")
-        media_diaria_titulo.setObjectName("MetricaTitle")
-        media_diaria_titulo.setFont(titulo_metrica_font)
-
-        media_diaria_valor_html = f"{metricas['media_diaria_atual']:.1f} " \
-                                  f"<font color='#999' style='font-size:{self.scale(15)}px;'>({metricas['media_diaria_qtd']:.1f} máq.)</font>"
-        media_diaria_valor = QLabel(media_diaria_valor_html)
-        media_diaria_valor.setObjectName("MetricaValue")
-        media_diaria_valor.setFont(valor_metrica_font)
-        
-        self.metricas_layout.addWidget(total_mes_titulo)
-        self.metricas_layout.addWidget(total_mes_valor)
-        self.metricas_layout.addStretch(1)
-        self.metricas_layout.addWidget(media_diaria_titulo)
-        self.metricas_layout.addWidget(media_diaria_valor)
-        self.metricas_layout.addStretch(1)
-
-        # --- Gráfico semanal ---
-        titulo_grafico = QLabel(f"Desempenho Semanal (Meta: {META_SEMANAL} máq.)")
-        titulo_grafico.setFont(titulo_metrica_font)
-        self.grafico_layout.addWidget(titulo_grafico)
-
+        # Atualiza Gráfico Semanal
         start_of_current_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
-        for data, valor in dados_grafico:
+        for i, (data, valor) in enumerate(dados_grafico):
+            widget_ref = self.weekly_progress_widgets[i]
             fim_semana = data + timedelta(days=6)
             texto_semana = f"Semana {data.strftime('%d/%m')} a {fim_semana.strftime('%d/%m')}"
             is_current_week = data.date() == start_of_current_week
             if is_current_week:
                 texto_semana = f"<b>▶ {texto_semana}</b>"
             
-            label_semana = QLabel(f"{texto_semana}: <b>{int(valor)}</b>")
-            label_semana.setFont(QFont("Inter", self.scale(10)))
+            widget_ref['label'].setText(f"{texto_semana}: <b>{int(valor)}</b>")
+            widget_ref['bar'].setValue(min(int(valor), META_SEMANAL))
+            widget_ref['bar'].setObjectName("currentWeek" if is_current_week else "")
+            # Re-aplica o stylesheet para garantir que o seletor de objeto funcione
+            widget_ref['bar'].setStyle(QApplication.style())
             
-            progress_bar = QProgressBar()
-            progress_bar.setRange(0, META_SEMANAL)
-            progress_bar.setValue(min(int(valor), META_SEMANAL))
-            progress_bar.setTextVisible(False)
-            progress_bar.setFixedHeight(self.scale(18))
-            progress_bar.setMaximumWidth(self.scale(550))
-            if is_current_week:
-                progress_bar.setObjectName("currentWeek")
+            widget_ref['label'].show()
+            widget_ref['bar'].show()
 
-            self.grafico_layout.addWidget(label_semana)
-            self.grafico_layout.addWidget(progress_bar)
-        self.grafico_layout.addStretch()
-
-        # --- KPIs ---
-        kpi_titulo_font = QFont("Inter", self.scale(11), QFont.Bold)
-        kpi_valor_font = QFont("Inter", self.scale(12), QFont.Bold)
-
-        # Recorde do mês
-        recorde_titulo = QLabel("Recorde Diário no Mês")
-        recorde_titulo.setObjectName("KpiTitle")
-        recorde_titulo.setFont(kpi_titulo_font)
-
+        for j in range(len(dados_grafico), len(self.weekly_progress_widgets)):
+            self.weekly_progress_widgets[j]['label'].hide()
+            self.weekly_progress_widgets[j]['bar'].hide()
+            
+        # Atualiza KPIs
         recorde_valor_html = f"{metricas['recorde_dia_valor']} pedidos " \
                              f"<font color='#999'>({metricas['recorde_dia_qtd']} máq.)</font><br>" \
                              f"<span id='KpiRecorde'>{metricas['recorde_dia_data']}</span>"
-        recorde_valor = QLabel(recorde_valor_html)
-        recorde_valor.setObjectName("KpiValue")
-        recorde_valor.setFont(kpi_valor_font)
+        self.recorde_valor.setText(recorde_valor_html)
 
-        self.kpi_layout.addWidget(recorde_titulo)
-        self.kpi_layout.addWidget(recorde_valor)
-        self.kpi_layout.addStretch()
 
 if __name__ == "__main__":
     locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
     app = QApplication(sys.argv)
     window = PainelMtec()
-    window.showMaximized()
+    # MODIFICADO: Inicia diretamente em tela cheia.
+    window.showFullScreen() 
     sys.exit(app.exec())
