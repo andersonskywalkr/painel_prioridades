@@ -101,10 +101,6 @@
         .table td, .table th {
              white-space: nowrap;
         }
-        
-        .table .priority-urgent td {
-            background-color: rgba(255, 193, 7, 0.1);
-        }
 
         .modal-content {
             background-color: var(--dark-card);
@@ -115,6 +111,27 @@
         }
         .modal-footer {
             border-top: 1px solid var(--dark-border);
+        }
+        
+        /* NOVO ESTILO PARA A SEÇÃO DE HISTÓRICO */
+        #pedidoHistorico {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--dark-border);
+        }
+        #pedidoHistorico ul {
+            list-style-type: none;
+            padding-left: 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #pedidoHistorico li {
+            font-size: 0.85rem;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--dark-border);
+        }
+        #pedidoHistorico li:last-child {
+            border-bottom: none;
         }
 
         .btn-primary {
@@ -151,18 +168,7 @@
                 <div class="col-md-3">
                      <select id="buscaMes" class="form-select">
                         <option value="">Qualquer Mês</option>
-                        <option value="1">Janeiro</option>
-                        <option value="2">Fevereiro</option>
-                        <option value="3">Março</option>
-                        <option value="4">Abril</option>
-                        <option value="5">Maio</option>
-                        <option value="6">Junho</option>
-                        <option value="7">Julho</option>
-                        <option value="8">Agosto</option>
-                        <option value="9">Setembro</option>
-                        <option value="10">Outubro</option>
-                        <option value="11">Novembro</option>
-                        <option value="12">Dezembro</option>
+                        <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
                      </select>
                 </div>
                  <div class="col-md-3">
@@ -172,19 +178,13 @@
         </div>
 
         <ul class="nav nav-pills mb-4" id="pills-tab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="pills-andamento-tab" data-bs-toggle="pill" data-bs-target="#pills-andamento" type="button" role="tab" aria-controls="pills-andamento" aria-selected="true">Em Andamento</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="pills-concluidos-tab" data-bs-toggle="pill" data-bs-target="#pills-concluidos" type="button" role="tab" aria-controls="pills-concluidos" aria-selected="false">Concluídos</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="pills-cancelados-tab" data-bs-toggle="pill" data-bs-target="#pills-cancelados" type="button" role="tab" aria-controls="pills-cancelados" aria-selected="false">Cancelados</button>
-            </li>
+            <li class="nav-item" role="presentation"><button class="nav-link active" id="pills-andamento-tab" data-bs-toggle="pill" data-bs-target="#pills-andamento" type="button">Em Andamento</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="pills-concluidos-tab" data-bs-toggle="pill" data-bs-target="#pills-concluidos" type="button">Concluídos</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="pills-cancelados-tab" data-bs-toggle="pill" data-bs-target="#pills-cancelados" type="button">Cancelados</button></li>
         </ul>
 
         <div class="tab-content" id="pills-tabContent">
-            <div class="tab-pane fade show active" id="pills-andamento" role="tabpanel" aria-labelledby="pills-andamento-tab">
+            <div class="tab-pane fade show active" id="pills-andamento" role="tabpanel">
                 <div class="table-container">
                     <table class="table table-hover">
                         <thead>
@@ -192,48 +192,42 @@
                                 <th>OP/PV</th> <th>Equipamento</th> <th>Qtd.</th> <th>Serviço</th> <th>Imagem</th> <th>Status</th> <th>Criado por</th> <th>Data Criação</th> <th>Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaPedidosAndamento">
-                        </tbody>
+                        <tbody id="tabelaPedidosAndamento"></tbody>
                     </table>
                 </div>
             </div>
-            <div class="tab-pane fade" id="pills-concluidos" role="tabpanel" aria-labelledby="pills-concluidos-tab">
+            <div class="tab-pane fade" id="pills-concluidos" role="tabpanel">
                 <div class="table-container">
                     <table class="table table-hover">
                          <thead>
                             <tr>
-                                <th>OP/PV</th> <th>Equipamento</th> <th>Qtd.</th> <th>Serviço</th> <th>Imagem</th> <th>Status</th> <th>Criado por</th> <th>Data Criação</th> <th>Ações</th>
+                                <th>OP/PV</th> <th>Equipamento</th> <th>Qtd.</th> <th>Status</th> <th>Criado por</th> <th>Data Criação</th><th>Data de Conclusão</th> <th>Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaPedidosConcluidos">
-                        </tbody>
+                        <tbody id="tabelaPedidosConcluidos"></tbody>
                     </table>
                 </div>
             </div>
-            <div class="tab-pane fade" id="pills-cancelados" role="tabpanel" aria-labelledby="pills-cancelados-tab">
+            <div class="tab-pane fade" id="pills-cancelados" role="tabpanel">
                 <div class="table-container">
                     <table class="table table-hover">
                          <thead>
                             <tr>
-                                <th>OP/PV</th> <th>Equipamento</th> <th>Qtd.</th> <th>Serviço</th> <th>Imagem</th> <th>Status</th> <th>Criado por</th> <th>Data Criação</th> <th>Ações</th>
+                                <th>OP/PV</th> <th>Equipamento</th> <th>Qtd.</th> <th>Status</th> <th>Criado por</th> <th>Data Criação</th><th>Data de Cancelamento</th> <th>Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaPedidosCancelados">
-                        </tbody>
+                        <tbody id="tabelaPedidosCancelados"></tbody>
                     </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="adicionarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="adicionarModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <form id="formAdicionarPedido">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Adicionar Novo Pedido</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
+                    <div class="modal-header"><h5 class="modal-title">Adicionar Novo Pedido</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
                          <div class="mb-3"> <label class="form-label">OP/PV</label> <input type="text" id="addPv" class="form-control" required> </div>
                          <div class="mb-3"> <label class="form-label">Equipamento</label> <input type="text" id="addEquipamento" class="form-control" required> </div>
@@ -244,43 +238,47 @@
                          <hr>
                          <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch" id="addUrgente">
-                            <label class="form-check-label" for="addUrgente">Marcar como Urgente (Prioridade Máxima)</label>
+                            <label class="form-check-label" for="addUrgente">Pedido Urgente</label>
                          </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Adicionar</button>
-                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Adicionar</button></div>
                 </form>
             </div>
         </div>
     </div>
-    <div class="modal fade" id="editarModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+    
+    <div class="modal fade" id="editarModal" tabindex="-1">
+        <div class="modal-dialog modal-lg"> 
             <div class="modal-content">
                 <form id="formEditarPedido">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Editar Pedido</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
+                    <div class="modal-header"><h5 class="modal-title">Editar Pedido</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
                         <input type="hidden" id="editId">
-                        <div class="mb-3"> <label class="form-label">OP/PV</label> <input type="text" id="editPv" class="form-control" required> </div>
-                        <div class="mb-3"> <label class="form-label">Equipamento</label> <input type="text" id="editEquipamento" class="form-control" required> </div>
-                        <div class="mb-3"> <label class="form-label">Quantidade</label> <input type="number" id="editQuantidade" class="form-control" required> </div>
-                        <div class="mb-3"> <label class="form-label">Serviço</label> <input type="text" id="editServico" class="form-control" required> </div>
-                        <div class="mb-3"> <label class="form-label">Imagem</label> <select id="editImagemId" class="form-select" required></select> </div>
-                        <div class="mb-3"> <label class="form-label">Status</label> <select id="editStatusId" class="form-select" required></select> </div>
-                        <hr>
-                        <div class="form-check form-switch">
-                           <input class="form-check-input" type="checkbox" role="switch" id="editUrgente">
-                           <label class="form-check-label" for="editUrgente">Marcar como Urgente (Prioridade Máxima)</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3"> <label class="form-label">OP/PV</label> <input type="text" id="editPv" class="form-control" required> </div>
+                                <div class="mb-3"> <label class="form-label">Equipamento</label> <input type="text" id="editEquipamento" class="form-control" required> </div>
+                                <div class="mb-3"> <label class="form-label">Quantidade</label> <input type="number" id="editQuantidade" class="form-control" required> </div>
+                                <div class="mb-3"> <label class="form-label">Serviço</label> <input type="text" id="editServico" class="form-control" required> </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3"> <label class="form-label">Imagem</label> <select id="editImagemId" class="form-select" required></select> </div>
+                                <div class="mb-3"> <label class="form-label">Status</label> <select id="editStatusId" class="form-select" required></select> </div>
+                                <hr>
+                                <div class="form-check form-switch">
+                                   <input class="form-check-input" type="checkbox" role="switch" id="editUrgente">
+                                   <label class="form-check-label" for="editUrgente">Pedido Urgente</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="pedidoHistorico">
+                            <h6 class="text-white-50">Histórico de Status</h6>
+                            <ul id="listaHistorico" class="list-group">
+                                </ul>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
-                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar Alterações</button></div>
                 </form>
             </div>
         </div>
@@ -288,17 +286,12 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // --- SCRIPT ATUALIZADO ---
-        
         let listaStatus = [];
         let listaImagem = [];
 
         function debounce(func, delay) {
             let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), delay);
-            };
+            return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
         }
 
         async function carregarDropdowns() {
@@ -311,15 +304,12 @@
                     select.innerHTML += `<option value="${status.id}">${status.nome}</option>`;
                 });
             });
-
             let respImagem = await fetch("/imagem");
             listaImagem = await respImagem.json();
             const selectsImagem = document.querySelectorAll("#editImagemId, #addImagemId");
             selectsImagem.forEach(select => {
                 select.innerHTML = "";
-                listaImagem.forEach(imagem => {
-                    select.innerHTML += `<option value="${imagem.id}">${imagem.nome}</option>`;
-                });
+                listaImagem.forEach(imagem => { select.innerHTML += `<option value="${imagem.id}">${imagem.nome}</option>`; });
             });
         }
 
@@ -327,34 +317,24 @@
             const buscaTexto = document.getElementById('buscaTexto').value;
             const buscaMes = document.getElementById('buscaMes').value;
             const buscaAno = document.getElementById('buscaAno').value;
-            
-            const params = new URLSearchParams({
-                filtro: tipoFiltro,
-                busca: buscaTexto,
-                mes: buscaMes,
-                ano: buscaAno
-            });
+            const params = new URLSearchParams({ filtro: tipoFiltro, busca: buscaTexto, mes: buscaMes, ano: buscaAno });
             const url = `/pedidos?${params.toString()}`;
-
             let resp = await fetch(url);
             let pedidos = await resp.json();
-
             let tbody = document.getElementById(targetTbodyId);
             tbody.innerHTML = "";
 
             if (pedidos.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4">Nenhum pedido encontrado com os filtros aplicados.</td></tr>`;
+                const colspan = (tipoFiltro === 'andamento') ? 9 : 8;
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center py-4">Nenhum pedido encontrado.</td></tr>`;
                 return;
             }
 
             pedidos.forEach(p => {
-                const imagemNome = p.imagem_nome ?? 'N/A';
-                const statusNome = p.status ?? 'N/A';
-                const imagemId = p.imagem_id ?? 'null';
                 const statusId = p.status_id ?? 'null';
                 const dataCriacao = p.data_criacao ? new Date(p.data_criacao).toLocaleString('pt-BR') : 'N/A';
-                const perfilAlteracao = p.perfil_alteracao ?? 'N/A';
-
+                const dataFinalizacao = p.data_finalizacao ? new Date(p.data_finalizacao).toLocaleString('pt-BR') : 'N/A';
+                
                 let badgeClass = 'bg-dark';
                 switch (statusId) {
                     case 1: badgeClass = 'bg-secondary'; break;
@@ -364,44 +344,58 @@
                     case 5: badgeClass = 'bg-warning text-dark'; break;
                     case 6: badgeClass = 'bg-danger'; break;
                 }
+                
+                // Cria o ícone de urgente se necessário
+                const urgentIcon = p.urgente ? '<i class="fas fa-fire text-danger ms-2"></i>' : '';
 
                 let tr = document.createElement("tr");
-                if(p.prioridade === 1) {
-                    tr.classList.add('priority-urgent');
+                let rowContent = '';
+                if (tipoFiltro === 'andamento') {
+                    rowContent = `<td>${p.pv}${urgentIcon}</td><td>${p.equipamento}</td><td>${p.quantidade}</td><td>${p.descricao_servico}</td><td>${p.imagem_nome ?? 'N/A'}</td><td><span class="badge ${badgeClass}">${p.status ?? 'N/A'}</span></td><td>${p.perfil_alteracao ?? 'N/A'}</td><td>${dataCriacao}</td>`;
+                } else {
+                    rowContent = `<td>${p.pv}${urgentIcon}</td><td>${p.equipamento}</td><td>${p.quantidade}</td><td><span class="badge ${badgeClass}">${p.status ?? 'N/A'}</span></td><td>${p.perfil_alteracao ?? 'N/A'}</td><td>${dataCriacao}</td><td>${dataFinalizacao}</td>`;
                 }
                 
-                tr.innerHTML = `
-                    <td>${p.pv}</td>
-                    <td>${p.equipamento}</td>
-                    <td>${p.quantidade}</td>
-                    <td>${p.descricao_servico}</td>
-                    <td>${imagemNome}</td>
-                    <td><span class="badge ${badgeClass}">${statusNome}</span></td>
-                    <td>${perfilAlteracao}</td>
-                    <td>${dataCriacao}</td>
-                    <td class="d-flex gap-2">
-                        <button class="btn btn-outline-warning btn-sm"
-                            onclick="editarPedido(${p.id}, '${p.pv}', '${p.equipamento}', ${p.quantidade}, '${p.descricao_servico}', ${imagemId}, ${statusId}, ${p.prioridade})">
-                            <i class="fas fa-pencil-alt"></i>
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="deletarPedido(${p.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
+                // Passa o booleano 'p.urgente' em vez de 'p.prioridade'
+                tr.innerHTML = rowContent + `<td class="d-flex gap-2"><button class="btn btn-outline-warning btn-sm" onclick="editarPedido(${p.id}, '${p.pv}', '${p.equipamento}', ${p.quantidade}, '${p.descricao_servico}', ${p.imagem_id ?? 'null'}, ${statusId}, ${p.urgente})"><i class="fas fa-pencil-alt"></i></button><button class="btn btn-outline-danger btn-sm" onclick="deletarPedido(${p.id})"><i class="fas fa-trash"></i></button></td>`;
                 tbody.appendChild(tr);
             });
         }
-
-        function editarPedido(id, pv, equipamento, quantidade, servico, imagemId, statusId, prioridade) {
+        
+        // Função editarPedido atualizada para buscar o histórico
+        async function editarPedido(id, pv, equipamento, quantidade, servico, imagemId, statusId, isUrgente) {
             document.getElementById("editId").value = id;
             document.getElementById("editPv").value = pv;
             document.getElementById("editEquipamento").value = equipamento;
             document.getElementById("editQuantidade").value = quantidade;
             document.getElementById("editServico").value = servico;
-            document.getElementById("editStatusId").value = statusId;
             document.getElementById("editImagemId").value = imagemId;
-            document.getElementById("editUrgente").checked = (prioridade === 1);
+            document.getElementById("editStatusId").value = statusId;
+            document.getElementById("editUrgente").checked = isUrgente;
+
+            const listaHistorico = document.getElementById("listaHistorico");
+            listaHistorico.innerHTML = '<li>Carregando histórico...</li>';
+            
+            // Busca o histórico na nova API
+            try {
+                let resp = await fetch(`/pedidos/${id}/historico`);
+                if (!resp.ok) throw new Error('Falha ao buscar histórico');
+                let historico = await resp.json();
+                
+                listaHistorico.innerHTML = "";
+                if (historico.length > 0) {
+                    historico.forEach(item => {
+                        const data = new Date(item.data_mudanca).toLocaleString('pt-BR');
+                        listaHistorico.innerHTML += `<li class="list-group-item">De <strong>${item.nome_status_anterior}</strong> para <strong>${item.nome_status_alterado}</strong><br><small class="text-white-50">${data} por ${item.alterado_por}</small></li>`;
+                    });
+                } else {
+                    listaHistorico.innerHTML = '<li class="list-group-item">Nenhum histórico de alteração de status encontrado.</li>';
+                }
+            } catch (error) {
+                listaHistorico.innerHTML = '<li class="list-group-item text-danger">Erro ao carregar histórico.</li>';
+                console.error(error);
+            }
+            
             let modal = new bootstrap.Modal(document.getElementById("editarModal"));
             modal.show();
         }
@@ -435,11 +429,7 @@
                 status_id: document.getElementById("addStatusId").value,
                 urgente: document.getElementById("addUrgente").checked
             };
-            await fetch("/pedidos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData)
-            });
+            await fetch("/pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) });
             bootstrap.Modal.getInstance(document.getElementById("adicionarModal")).hide();
             triggerSearch();
         });
@@ -456,11 +446,7 @@
                 imagem_id: document.getElementById("editImagemId").value,
                 urgente: document.getElementById("editUrgente").checked
             };
-            await fetch(`/pedidos/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData)
-            });
+            await fetch(`/pedidos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) });
             bootstrap.Modal.getInstance(document.getElementById("editarModal")).hide();
             triggerSearch();
         });
@@ -469,21 +455,13 @@
         document.getElementById('pills-concluidos-tab').addEventListener('click', () => carregarPedidos('concluido', 'tabelaPedidosConcluidos'));
         document.getElementById('pills-cancelados-tab').addEventListener('click', () => carregarPedidos('cancelado', 'tabelaPedidosCancelados'));
         
-        // Eventos para os campos de busca ATUALIZADOS
         const buscaAnoInput = document.getElementById('buscaAno');
-        
-        // Validação para permitir apenas números no campo de ano
-        buscaAnoInput.addEventListener('input', function() {
-            this.value = this.value.replace(/[^0-9]/g, '');
-        });
-
+        buscaAnoInput.addEventListener('input', function() { this.value = this.value.replace(/[^0-9]/g, ''); });
         document.getElementById('buscaTexto').addEventListener('input', debounce(triggerSearch, 400));
         document.getElementById('buscaMes').addEventListener('change', triggerSearch);
-        buscaAnoInput.addEventListener('input', debounce(triggerSearch, 400)); // Alterado de 'change' para 'input'
-
-        // Carregamento inicial
+        buscaAnoInput.addEventListener('input', debounce(triggerSearch, 400));
+        
         document.addEventListener("DOMContentLoaded", async () => {
-            // Lógica de popular anos foi removida daqui
             await carregarDropdowns();
             carregarPedidos('andamento', 'tabelaPedidosAndamento');
         });
