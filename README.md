@@ -71,7 +71,7 @@ docker compose up -d --build
 ```
 ---
 
-### 🌐 Acessando a Aplicação
+## 🌐 Acessando a Aplicação
 - Interface web: [http://localhost:5000](http://localhost:5000)  
 
 ```Markdown
@@ -79,7 +79,7 @@ docker compose up -d --build
 ```
 ---
 
-### 📥 Importando Dados Iniciais
+## 📥 Importando Dados Iniciais
 
 ```bash
 docker compose exec app python app/migracao_dados.py
@@ -87,14 +87,14 @@ docker compose exec app python app/migracao_dados.py
 
 ---
 
-### 🛑 Encerrando os Serviços
+## 🛑 Encerrando os Serviços
 
 ```bash
 docker compose down
 ```
 ---
 
-📂 Estrutura do Projeto
+## 📂 Estrutura do Projeto
 ```plaintext
 Copiar código
 .
