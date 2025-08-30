@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Painel de Pedidos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --dark-bg: #1a1d24;
+            --dark-card: #282c37;
+            --dark-border: #3a4152;
+            --primary-accent: #0d6efd;
+            --light-text: #f0f0f0;
+            --secondary-text: #a0a0a0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--light-text);
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 2.5rem;
+            margin: auto;
+            background-color: var(--dark-card);
+            border-radius: 0.75rem;
+            border: 1px solid var(--dark-border);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .login-container .form-control {
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+        }
+        
+        .login-container .form-control:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+
+        .login-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .login-header .icon {
+            font-size: 3rem;
+            color: var(--primary-accent);
+            margin-bottom: 1rem;
+        }
+
+        .login-header h2 {
+            font-weight: 600;
+        }
+
+        .login-footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--secondary-text);
+        }
+
+        .login-footer p {
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <div class="icon"><i class="fas fa-lock"></i></div>
+            <h2>Painel de Pedidos</h2>
+            <h4 class="text-white-50">Acesso Restrito</h4>
+        </div>
+
+        <form method="POST">
+            {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error }}
+                </div>
+            {% endif %}
+            <div class="form-floating mb-3">
+                <input type="text" name="username" class="form-control" id="floatingInput" placeholder="Usuário" required autofocus>
+                <label for="floatingInput">Usuário</label>
+            </div>
+            <div class="form-floating">
+                <input type="password" name="password" class="form-control" id="floatingPassword" placeholder="Senha" required>
+                <label for="floatingPassword">Senha</label>
+            </div>
+            
+            <button class="w-100 btn btn-lg btn-primary mt-4" type="submit">Entrar</button>
+        </form>
+
+        <footer class="login-footer">
+            <p>&copy; 2025 Painel MTEC</p>
+            <p>Developed by Luiz S., Vitor B. & Anderson V.</p>
+        </footer>
+    </div>
+</body>
+</html>

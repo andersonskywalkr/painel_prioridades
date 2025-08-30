@@ -1,0 +1,271 @@
+# Arquivo: crud.py (Atualizado com a lógica de data_conclusao)
+
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask_cors import CORS
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
+from functools import wraps
+import os
+from datetime import datetime
+
+app = Flask(__name__, template_folder='templates', static_folder='static')
+CORS(app)
+
+# --- Configurações de Sessão ---
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or os.urandom(24)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+
+# --- Conexão com o Banco de Dados via Variável de Ambiente ---
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql+psycopg2://postgres:2025@localhost:5432/pedidos_db')
+engine = create_engine(DATABASE_URL)
+
+# --- Definição das Tabelas (Modelos SQLAlchemy) ---
+Base = declarative_base()
+
+class StatusTd(Base):
+    __tablename__ = 'status_td'
+    id = Column(Integer, primary_key=True)
+    nome_status = Column(String, nullable=False, unique=True)
+
+class ImagemTd(Base):
+    __tablename__ = 'imagem_td'
+    id = Column(Integer, primary_key=True)
+    nome = Column(String, nullable=False, unique=True)
+
+class PedidosTb(Base):
+    __tablename__ = 'pedidos_tb'
+    id = Column(Integer, primary_key=True)
+    codigo_pedido = Column(String, unique=True)
+    equipamento = Column(String)
+    pv = Column(String)
+    descricao_servico = Column(String)
+    status_id = Column(Integer, ForeignKey('status_td.id'))
+    imagem_id = Column(Integer, ForeignKey('imagem_td.id'))
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+    data_conclusao = Column(DateTime)
+    quantidade = Column(Integer)
+    prioridade = Column(Integer)
+    perfil_alteracao = Column(String)
+    urgente = Column(Boolean, default=False)
+
+class HistoricoStatusTb(Base):
+    __tablename__ = 'historico_status_tb'
+    id = Column(Integer, primary_key=True)
+    pedido_id = Column(Integer, ForeignKey('pedidos_tb.id'))
+    status_anterior = Column(Integer)
+    status_alterado = Column(Integer)
+    data_mudanca = Column(DateTime, default=datetime.utcnow)
+    alterado_por = Column(String)
+
+with app.app_context():
+    print("Verificando e criando tabelas, se necessário...")
+    Base.metadata.create_all(engine)
+    print("Tabelas prontas.")
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# --- Rotas ---
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        if username == "admin" and password == "admin":
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('home'))
+        else:
+            return render_template("login.html", error="Credenciais inválidas.")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route("/")
+@login_required
+def home():
+    return render_template("index.html")
+
+@app.route("/pedidos", methods=["GET"])
+@login_required
+def get_pedidos():
+    filtro_tab = request.args.get('filtro')
+    busca_texto = request.args.get('busca')
+    busca_mes = request.args.get('mes')
+    busca_ano = request.args.get('ano')
+    params = {}
+    where_conditions = []
+
+    if filtro_tab == 'concluido':
+        where_conditions.append("p.status_id = 4")
+    elif filtro_tab == 'cancelado':
+        where_conditions.append("p.status_id = 6")
+    else:
+        where_conditions.append("p.status_id NOT IN (4, 6)")
+
+    if busca_texto:
+        where_conditions.append("p.pv ILIKE :busca")
+        params['busca'] = f"%{busca_texto}%"
+    
+    coluna_data_filtro = "p.data_criacao"
+    if filtro_tab in ['concluido', 'cancelado']:
+        coluna_data_filtro = "p.data_conclusao"
+
+    if busca_mes:
+        where_conditions.append(f"EXTRACT(MONTH FROM {coluna_data_filtro}) = :mes")
+        params['mes'] = int(busca_mes)
+    
+    if busca_ano and busca_ano.isdigit() and len(busca_ano) == 4:
+        where_conditions.append(f"EXTRACT(YEAR FROM {coluna_data_filtro}) = :ano")
+        params['ano'] = int(busca_ano)
+
+    query_sql = """
+        SELECT 
+            p.*, 
+            s.nome_status as status, 
+            i.nome as imagem_nome,
+            p.data_conclusao as data_finalizacao 
+        FROM public.pedidos_tb p
+        LEFT JOIN public.status_td s ON p.status_id = s.id 
+        LEFT JOIN public.imagem_td i ON p.imagem_id = i.id
+    """
+    
+    if where_conditions:
+        query_sql += " WHERE " + " AND ".join(where_conditions)
+    
+    # Ordenação correta: primeiro os urgentes, depois pela prioridade numérica.
+    query_sql += " ORDER BY p.urgente DESC, p.prioridade ASC"
+
+    with engine.connect() as conn:
+        result = conn.execute(text(query_sql), params)
+        pedidos = [dict(row._mapping) for row in result]
+    return jsonify(pedidos)
+
+@app.route("/pedidos", methods=["POST"])
+@login_required
+def add_pedido():
+    data = request.json
+    username = session.get('username', 'Desconhecido')
+    data_criacao = datetime.now()
+    urgente = data.get('urgente', False)
+
+    with engine.connect() as conn:
+        with conn.begin():
+            max_prioridade_result = conn.execute(text("SELECT COALESCE(MAX(prioridade), 0) FROM public.pedidos_tb")).scalar_one()
+            nova_prioridade = max_prioridade_result + 1
+            result = conn.execute(
+                text("""INSERT INTO public.pedidos_tb (pv, equipamento, quantidade, descricao_servico, status_id, imagem_id, perfil_alteracao, data_criacao, urgente, prioridade) VALUES (:pv, :equipamento, :quantidade, :descricao_servico, :status_id, :imagem_id, :perfil_alteracao, :data_criacao, :urgente, :prioridade) RETURNING id"""),
+                {"pv": data["pv"], "equipamento": data["equipamento"], "quantidade": data["quantidade"], "descricao_servico": data["descricao_servico"], "status_id": data["status_id"], "imagem_id": data["imagem_id"], "perfil_alteracao": username, "data_criacao": data_criacao, "urgente": urgente, "prioridade": nova_prioridade}
+            )
+            novo_pedido_id = result.scalar_one()
+            conn.execute(
+                text("INSERT INTO public.historico_status_tb (pedido_id, status_anterior, status_alterado, data_mudanca, alterado_por) VALUES (:pedido_id, NULL, :status_alterado, :data_mudanca, :alterado_por)"),
+                {"pedido_id": novo_pedido_id, "status_alterado": data["status_id"], "data_mudanca": data_criacao, "alterado_por": username}
+            )
+    return jsonify({"mensagem": "Pedido adicionado com sucesso!"}), 201
+
+@app.route("/pedidos/<int:pedido_id>", methods=["PUT"])
+@login_required
+def update_pedido(pedido_id):
+    data = request.json
+    username = session.get('username', 'Desconhecido')
+    urgente_novo_estado = data.get('urgente', False)
+    novo_status_id = int(data.get("status_id"))
+    prioridade_atual = data.get("prioridade")
+
+    with engine.connect() as conn:
+        with conn.begin():
+            pedido_atual = conn.execute(text("SELECT status_id FROM public.pedidos_tb WHERE id = :id"), {"id": pedido_id}).fetchone()
+            if not pedido_atual:
+                return jsonify({"erro": "Pedido não encontrado"}), 404
+            status_anterior_id = pedido_atual.status_id
+
+            query_update_sql = """
+                UPDATE public.pedidos_tb 
+                SET pv=:pv, equipamento=:equipamento, quantidade=:quantidade, 
+                    descricao_servico=:descricao_servico, status_id=:status_id, 
+                    imagem_id=:imagem_id, perfil_alteracao=:perfil_alteracao,
+                    urgente=:urgente, prioridade=:prioridade 
+            """
+            params = {
+                "id": pedido_id, "pv": data["pv"], "equipamento": data["equipamento"], 
+                "quantidade": data["quantidade"], "descricao_servico": data["descricao_servico"], 
+                "status_id": novo_status_id, "imagem_id": data["imagem_id"], 
+                "perfil_alteracao": username, "urgente": urgente_novo_estado,
+                "prioridade": prioridade_atual
+            }
+
+            if novo_status_id in [4, 6]:
+                query_update_sql += ", data_conclusao = :data_conclusao"
+                params["data_conclusao"] = datetime.now()
+
+            query_update_sql += " WHERE id=:id"
+            conn.execute(text(query_update_sql), params)
+
+            if status_anterior_id != novo_status_id:
+                conn.execute(
+                    text("INSERT INTO public.historico_status_tb (pedido_id, status_anterior, status_alterado, data_mudanca, alterado_por) VALUES (:pedido_id, :status_anterior, :status_alterado, :data_mudanca, :alterado_por)"),
+                    {"pedido_id": pedido_id, "status_anterior": status_anterior_id, "status_alterado": novo_status_id, "data_mudanca": datetime.now(), "alterado_por": username}
+                )
+
+    return jsonify({"mensagem": "Pedido atualizado!"})
+
+@app.route("/status", methods=["GET"])
+@login_required
+def get_status():
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT id, nome_status as nome FROM public.status_td ORDER BY id"))
+        status = [dict(row._mapping) for row in result]
+    return jsonify(status)
+
+@app.route("/imagem", methods=["GET"])
+@login_required
+def get_imagens():
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT id, nome FROM public.imagem_td ORDER BY id"))
+        imagens = [dict(row._mapping) for row in result]
+    return jsonify(imagens)
+
+@app.route("/pedidos/<int:pedido_id>", methods=["DELETE"])
+@login_required
+def delete_pedido(pedido_id):
+    with engine.connect() as conn:
+        with conn.begin():
+            conn.execute(text("DELETE FROM public.historico_status_tb WHERE pedido_id=:id"), {"id": pedido_id})
+            conn.execute(text("DELETE FROM public.pedidos_tb WHERE id=:id"), {"id": pedido_id})
+    return jsonify({"mensagem": "Pedido deletado!"})
+
+@app.route("/pedidos/<int:pedido_id>/historico", methods=["GET"])
+@login_required
+def get_historico_pedido(pedido_id):
+    query = """
+        SELECT 
+            h.data_mudanca, h.alterado_por,
+            COALESCE(s_ant.nome_status, 'CRIADO') as nome_status_anterior,
+            s_alt.nome_status as nome_status_alterado
+        FROM public.historico_status_tb h
+        LEFT JOIN public.status_td s_ant ON h.status_anterior = s_ant.id
+        LEFT JOIN public.status_td s_alt ON h.status_alterado = s_alt.id
+        WHERE h.pedido_id = :pedido_id
+        ORDER BY h.data_mudanca ASC
+    """
+    with engine.connect() as conn:
+        result = conn.execute(text(query), {"pedido_id": pedido_id})
+        historico = [dict(row._mapping) for row in result]
+    return jsonify(historico)
+
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000, debug=True)
+

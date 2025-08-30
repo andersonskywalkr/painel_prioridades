@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:13
+    container_name: pedidos-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "2025"
+      POSTGRES_DB: pedidos_db
+    volumes:
+      - pedidos_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    container_name: flask-app
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    environment:
+      - FLASK_APP=crud.py
+      # MUDANÇA AQUI: Adicionada a variável para ativar o modo de depuração
+      - FLASK_DEBUG=1
+      - DATABASE_URL=postgresql://postgres:2025@db:5432/pedidos_db
+
+volumes:
+  pedidos_db_data:
