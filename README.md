@@ -51,6 +51,7 @@ O painel é otimizado para telas grandes e atualiza automaticamente, mostrando o
 
 ### Pré-requisitos
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e em execução.
+- [pgAdmin 4]([https://www.docker.com/products/docker-desktop/](https://www.pgadmin.org/download/pgadmin-4-windows/)) instalado e em execução.
 
 # Passos
 
