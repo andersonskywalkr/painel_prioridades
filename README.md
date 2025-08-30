@@ -70,11 +70,44 @@ cd painel_mtec
 docker compose up -d --build
 ```
 
-# Acessando a Aplicação
+### 🌐 Acessando a Aplicação
+- Interface web: [http://localhost:5000](http://localhost:5000)  
 
-Interface web: http://localhost:5000
-
-Credenciais padrão:
-
-Usuário: admin  
+**Credenciais padrão:**
+```plaintext
+Usuário: admin
 Senha: admin
+```
+
+### 📥 Importando Dados Iniciais
+
+```bash
+docker compose exec app python app/migracao_dados.py
+```
+
+
+### 🛑 Encerrando os Serviços
+
+```bash
+docker compose down
+```
+
+📂 Estrutura do Projeto
+```plaintext
+Copiar código
+.
+├── app/
+│   └── migracao_dados.py       # Script para importar dados da planilha Excel
+├── dados/
+│   └── Status_dos_pedidos.xlsm # Planilha com dados de exemplo
+├── templates/
+│   ├── index.html              # Página principal da interface web
+│   └── login.html              # Tela de login
+├── crud.py                     # Backend principal da aplicação Flask
+├── painel.py                   # Dashboard de visualização (TV)
+├── Dockerfile                  # Configuração da imagem da aplicação
+├── docker-compose.yml          # Orquestração dos serviços
+└── requirements.txt            # Dependências do projeto
+```
+
+
