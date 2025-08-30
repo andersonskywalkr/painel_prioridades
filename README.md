@@ -74,10 +74,8 @@ docker compose up -d --build
 ### 🌐 Acessando a Aplicação
 - Interface web: [http://localhost:5000](http://localhost:5000)  
 
-**Credenciais padrão:**
-```plaintext
-Usuário: admin
-Senha: admin
+```Markdown
+> ⚠️ **Atenção:** As credenciais de login não são públicas. Solicite-as ao administrador do sistema.
 ```
 ---
 
