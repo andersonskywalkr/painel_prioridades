@@ -69,6 +69,7 @@ cd painel_mtec
 ```bash
 docker compose up -d --build
 ```
+---
 
 ### 🌐 Acessando a Aplicação
 - Interface web: [http://localhost:5000](http://localhost:5000)  
@@ -78,6 +79,7 @@ docker compose up -d --build
 Usuário: admin
 Senha: admin
 ```
+---
 
 ### 📥 Importando Dados Iniciais
 
@@ -85,12 +87,14 @@ Senha: admin
 docker compose exec app python app/migracao_dados.py
 ```
 
+---
 
 ### 🛑 Encerrando os Serviços
 
 ```bash
 docker compose down
 ```
+---
 
 📂 Estrutura do Projeto
 ```plaintext
