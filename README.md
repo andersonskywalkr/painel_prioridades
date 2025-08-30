@@ -1,27 +1,56 @@
-Painel de Produção e Gerador de Relatórios MTEC
-Este projeto contém dois programas principais:
+# 📊 Painel de Produção MTEC
 
-prioridades.py: Um painel de visualização em tempo real para o status da produção.
+Um sistema completo para **gerenciamento de ordens de produção**, composto por:  
+- **Interface Web** para CRUD de pedidos.  
+- **Painel de Visualização em tempo real** para TVs, ideal para acompanhamento na linha de produção.  
 
-relatorios.py: Uma ferramenta para gerar relatórios de atividades a partir dos dados de produção.
+---
 
-Instalação
-Para garantir que os dois programas funcionem corretamente, você precisa instalar as seguintes bibliotecas Python.
+## 🖼️ Telas do Projeto
 
-Comando de Instalação
-Abra o seu terminal (CMD, PowerShell, etc.) e execute o seguinte comando:
+### 🌐 Interface Web de Gerenciamento
+A interface web permite a criação, edição, exclusão e reordenação de pedidos de forma intuitiva e rápida.  
 
-pip install pandas PySide6 numpy watchdog openpyxl
+![Interface Web](link-da-imagem-aqui)  
+*Legenda: Tela principal da interface web, mostrando a lista de pedidos em andamento com opções de filtro e edição.*
 
-Detalhes das Bibliotecas
-pandas: Utilizada para ler e manipular os dados da planilha Excel.
+---
 
-PySide6: A biblioteca principal para a criação de toda a interface gráfica dos programas.
+### 📺 Painel de Visualização (Dashboard para TV)
+O painel é otimizado para telas grandes e atualiza automaticamente, mostrando o status da produção em tempo real para toda a equipe.  
 
-numpy: Uma dependência do pandas, essencial para operações numéricas.
+![Painel TV](link-da-imagem-aqui)  
+*Legenda: Dashboard de produção exibindo as prioridades, status e métricas de desempenho.*
 
-watchdog: Usada pelo painel principal para detectar automaticamente quando a planilha de status é modificada.
+---
 
-openpyxl: Necessária para que o pandas consiga ler e escrever em arquivos Excel (.xlsx, .xlsm).
+## ✨ Funcionalidades Principais
 
-Após a instalação, você poderá executar os dois scripts Python sem problemas.
+- **Gerenciamento Completo (CRUD):** Crie, leia, atualize e delete pedidos através de uma interface web amigável.  
+- **Controle de Prioridade:** Organize a fila de produção de forma interativa com botões para subir e descer a prioridade dos pedidos.  
+- **Status de Urgência:** Destaque pedidos críticos para que sejam tratados com prioridade máxima.  
+- **Painel em Tempo Real:** Dashboard com atualização automática para TVs.  
+- **Histórico de Alterações:** Rastreie todas as mudanças de status de cada pedido.  
+- **Filtros e Pesquisa:** Encontre pedidos rapidamente por OP/PV, mês ou ano.  
+- **Ambiente Dockerizado:** Aplicação + banco de dados rodando em contêineres Docker para fácil instalação e execução.  
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Backend:** Python (Flask)  
+- **Banco de Dados:** PostgreSQL  
+- **Frontend:** HTML5, CSS3, JavaScript, Bootstrap 5  
+- **Painel (Dashboard TV):** Python (PySide6 - Qt for Python)  
+- **Containerização:** Docker e Docker Compose  
+- **Análise de Dados:** Pandas  
+
+---
+
+## 🚀 Como Rodar o Projeto
+
+Com **Docker**, rodar o projeto é muito simples. Basta ter o **Docker Desktop** instalado e funcionando.  
+
+### 1. Clone o repositório
+```bash
+git clone https://github.com/andersonskywalkr/painel_mtec.git
