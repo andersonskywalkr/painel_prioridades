@@ -53,12 +53,18 @@ O painel é otimizado para telas grandes e atualiza automaticamente, mostrando o
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e em execução.
 
 ### Passos
-```bash
+
 # Clone o repositório
+```bash
 git clone https://github.com/andersonskywalkr/painel_mtec.git
+```
 
 # Entre na pasta do projeto
+```bash
 cd painel_mtec
+```
 
 # Construa e inicie os contêineres
+```bash
 docker compose up -d --build
+```
