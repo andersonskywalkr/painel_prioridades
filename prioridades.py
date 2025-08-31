@@ -9,9 +9,29 @@ import numpy as np
 import time
 import traceback
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton)
+                               QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton, QGridLayout)
 from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtCore import QTimer, Qt
+
+# --- TIMEZONE / BRASÍLIA ---
+TIMEZONE_NAME = "America/Sao_Paulo"
+try:
+    from zoneinfo import ZoneInfo
+    TZ = ZoneInfo(TIMEZONE_NAME)
+except ImportError:
+    import pytz
+    TZ = pytz.timezone(TIMEZONE_NAME)
+
+def to_brasilia(series):
+    s = pd.to_datetime(series, errors='coerce')
+    try:
+        if s.dt.tz is None:
+            s = s.dt.tz_localize('UTC').dt.tz_convert(TZ)
+        else:
+            s = s.dt.tz_convert(TZ)
+    except Exception:
+        s = pd.to_datetime(series, errors='coerce')
+    return s
 
 # --- CONFIGURAÇÃO GERAL E DE DADOS ---
 SCALE_FACTOR = 0.8
@@ -24,8 +44,8 @@ DB_USER = "postgres"
 DB_PASSWORD = "2025"
 
 # --- CONSTANTES DE COLUNAS E STATUS ---
-COLUNA_PEDIDO_ID, COLUNA_PV, COLUNA_SERVICO, COLUNA_STATUS, COLUNA_DATA_STATUS, COLUNA_QTD, COLUNA_EQUIPAMENTO, COLUNA_URGENTE, COLUNA_DATA_CONCLUSAO = \
-    'id', 'pv', 'descricao_servico', 'nome_status', 'data_criacao', 'quantidade', 'equipamento', 'urgente', 'data_conclusao'
+COLUNA_PEDIDO_ID, COLUNA_PV, COLUNA_SERVICO, COLUNA_STATUS, COLUNA_DATA_STATUS, COLUNA_QTD, COLUNA_EQUIPAMENTO, COLUNA_URGENTE, COLUNA_DATA_CONCLUSAO, COLUNA_IMAGEM = \
+    'id', 'pv', 'descricao_servico', 'nome_status', 'data_criacao', 'quantidade', 'equipamento', 'urgente', 'data_conclusao', 'image'
     
 STATUS_PENDENTE, STATUS_BACKLOG, STATUS_AGUARDANDO_CHEGADA, STATUS_EM_MONTAGEM, STATUS_CONCLUIDO, STATUS_CANCELADO, STATUS_URGENTE = \
     'Pendente', 'Backlog', 'Aguardando Chegada', 'Em Montagem', 'Concluído', 'Cancelado', 'Urgente'
@@ -53,27 +73,27 @@ def carregar_dados():
     conn = None
     try:
         conn = get_db_connection()
-        # ==============================================================================
-        # MODIFICAÇÃO 1: A consulta SQL agora busca também a coluna 'data_conclusao'
-        # ==============================================================================
         query = f"""
-        SELECT 
-            p.id AS "{COLUNA_PEDIDO_ID}",
-            p.equipamento AS "{COLUNA_EQUIPAMENTO}",
-            p.pv AS "{COLUNA_PV}",
-            p.descricao_servico AS "{COLUNA_SERVICO}",
-            s.nome_status AS "{COLUNA_STATUS}",
-            p.data_criacao AS "{COLUNA_DATA_STATUS}",
-            p.quantidade AS "{COLUNA_QTD}",
-            p.urgente AS "{COLUNA_URGENTE}",
-            p.data_conclusao AS "{COLUNA_DATA_CONCLUSAO}"
-        FROM 
-            pedidos_tb p
-        JOIN
-            status_td s ON p.status_id = s.id
-        ORDER BY
-            p.urgente DESC, p.prioridade ASC;
-        """
+            SELECT 
+                p.id AS "{COLUNA_PEDIDO_ID}",
+                p.equipamento AS "{COLUNA_EQUIPAMENTO}",
+                p.pv AS "{COLUNA_PV}",
+                p.descricao_servico AS "{COLUNA_SERVICO}",
+                s.nome_status AS "{COLUNA_STATUS}",
+                p.data_criacao AS "{COLUNA_DATA_STATUS}",
+                p.quantidade AS "{COLUNA_QTD}",
+                p.urgente AS "{COLUNA_URGENTE}",
+                p.data_conclusao AS "{COLUNA_DATA_CONCLUSAO}",
+                i.nome AS "{COLUNA_IMAGEM}"
+            FROM 
+                pedidos_tb p
+            JOIN
+                status_td s ON p.status_id = s.id
+            LEFT JOIN                           
+                imagem_td i ON p.imagem_id = i.id 
+            ORDER BY
+                p.urgente DESC, p.prioridade ASC;
+            """
         df = pd.read_sql(query, conn)
         print("Dados brutos carregados do banco de dados:")
         print(df.head())
@@ -96,24 +116,22 @@ def carregar_dados():
     # --- Processamento dos dados ---
     df_full = df.copy()
     
-    # Converte as colunas de data, tratando possíveis erros
-    df_full[COLUNA_DATA_STATUS] = pd.to_datetime(df_full[COLUNA_DATA_STATUS], errors='coerce').dt.tz_localize(None)
-    df_full[COLUNA_DATA_CONCLUSAO] = pd.to_datetime(df_full[COLUNA_DATA_CONCLUSAO], errors='coerce').dt.tz_localize(None)
-    
+    # Converte as colunas de data para o fuso de Brasília (tz-aware)
+    df_full[COLUNA_DATA_STATUS] = to_brasilia(df_full[COLUNA_DATA_STATUS])
+    df_full[COLUNA_DATA_CONCLUSAO] = to_brasilia(df_full[COLUNA_DATA_CONCLUSAO])
+
     df_full[COLUNA_STATUS] = df_full[COLUNA_STATUS].astype(str).str.strip()
     df_full.rename(columns={COLUNA_URGENTE: 'is_urgent'}, inplace=True, errors='ignore')
 
     status_finalizados = [STATUS_CONCLUIDO.lower(), STATUS_CANCELADO.lower()]
     df_principal = df_full[~df_full[COLUNA_STATUS].str.lower().isin(status_finalizados)].copy()
     
-    hoje = datetime.now().date()
+    # Use agora no fuso de Brasília
+    hoje = datetime.now(TZ).date()
     
-    # ==============================================================================
-    # MODIFICAÇÃO 2: A filtragem de concluídos e cancelados do dia agora usa a
-    # coluna COLUNA_DATA_CONCLUSAO em vez de COLUNA_DATA_STATUS (data_criacao).
-    # ==============================================================================
+    # Usar data de conclusão para concluídos/cancelados do dia
     df_concluidos_hoje = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO].dt.date == hoje)].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
-    df_cancelados_hoje = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CANCELADO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO].dt.date == hoje)].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
+    df_cancelados = df_full[df_full[COLUNA_STATUS].str.lower() == STATUS_CANCELADO.lower()].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
 
     if not df_principal.empty:
         df_principal = df_principal.reset_index(drop=True)
@@ -121,19 +139,19 @@ def carregar_dados():
 
     # Cálculos dos totais
     is_teravix_concluido = df_concluidos_hoje[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
-    is_teravix_cancelado = df_cancelados_hoje[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
+    is_teravix_cancelado = df_cancelados[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
 
     teravix_concluidos_qtd = df_concluidos_hoje.loc[is_teravix_concluido, COLUNA_QTD].sum()
     pv_concluidos_qtd = df_concluidos_hoje.loc[~is_teravix_concluido, COLUNA_QTD].sum()
     totais_concluidos = (len(df_concluidos_hoje[is_teravix_concluido]), len(df_concluidos_hoje[~is_teravix_concluido]), len(df_concluidos_hoje),
                          teravix_concluidos_qtd, pv_concluidos_qtd, df_concluidos_hoje[COLUNA_QTD].sum())
 
-    teravix_cancelados_qtd = df_cancelados_hoje.loc[is_teravix_cancelado, COLUNA_QTD].sum()
-    pv_cancelados_qtd = df_cancelados_hoje.loc[~is_teravix_cancelado, COLUNA_QTD].sum()
-    totais_cancelados = (len(df_cancelados_hoje[is_teravix_cancelado]), len(df_cancelados_hoje[~is_teravix_cancelado]), len(df_cancelados_hoje),
-                         teravix_cancelados_qtd, pv_cancelados_qtd, df_cancelados_hoje[COLUNA_QTD].sum())
+    teravix_cancelados_qtd = df_cancelados.loc[is_teravix_cancelado, COLUNA_QTD].sum()
+    pv_cancelados_qtd = df_cancelados.loc[~is_teravix_cancelado, COLUNA_QTD].sum()
+    totais_cancelados = (len(df_cancelados[is_teravix_cancelado]), len(df_cancelados[~is_teravix_cancelado]), len(df_cancelados),
+                         teravix_cancelados_qtd, pv_cancelados_qtd, df_cancelados[COLUNA_QTD].sum())
 
-    return df_full, df_principal, df_concluidos_hoje, df_cancelados_hoje, totais_concluidos, totais_cancelados
+    return df_full, df_principal, df_concluidos_hoje, df_cancelados, totais_concluidos, totais_cancelados
 
 
 def calcular_metricas_dashboard(df_full):
@@ -141,13 +159,10 @@ def calcular_metricas_dashboard(df_full):
         return {"total_mes_atual": 0, "total_mes_atual_qtd": 0, "media_diaria_atual": 0, "media_diaria_qtd": 0,
                 "total_mes_anterior": 0, "media_diaria_anterior": 0,
                 "recorde_dia_valor": 0, "recorde_dia_data": "N/A", "recorde_dia_qtd": 0}
-    hoje = datetime.now()
-    inicio_mes_atual = hoje.replace(day=1, hour=0, minute=0, second=0)
-
-    # ==============================================================================
-    # MODIFICAÇÃO 3: As métricas do dashboard também passam a usar a data de conclusão
-    # ==============================================================================
-    df_concluidos_mes_atual = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (pd.to_datetime(df_full[COLUNA_DATA_CONCLUSAO]) >= inicio_mes_atual) & (pd.to_datetime(df_full[COLUNA_DATA_CONCLUSAO]) <= hoje)]
+    hoje = datetime.now(TZ)
+    inicio_mes_atual = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    df_concluidos_mes_atual = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_atual) & (df_full[COLUNA_DATA_CONCLUSAO] <= hoje)]
     
     total_mes_atual_pedidos = len(df_concluidos_mes_atual)
     total_mes_atual_qtd = df_concluidos_mes_atual[COLUNA_QTD].sum()
@@ -156,34 +171,53 @@ def calcular_metricas_dashboard(df_full):
     media_diaria_qtd = total_mes_atual_qtd / dias_uteis_mes_atual if dias_uteis_mes_atual > 0 else 0
     
     fim_mes_anterior = inicio_mes_atual - timedelta(days=1); inicio_mes_anterior = fim_mes_anterior.replace(day=1)
-    df_concluidos_mes_anterior = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (pd.to_datetime(df_full[COLUNA_DATA_CONCLUSAO]) >= inicio_mes_anterior) & (pd.to_datetime(df_full[COLUNA_DATA_CONCLUSAO]) <= fim_mes_anterior)]
-    media_diaria_anterior = len(df_concluidos_mes_anterior) / np.busday_count(inicio_mes_anterior.strftime('%Y-%m-%d'), (fim_mes_anterior + timedelta(days=1)).strftime('%Y-%m-%d')) if np.busday_count(inicio_mes_anterior.strftime('%Y-%m-%d'), (fim_mes_anterior + timedelta(days=1)).strftime('%Y-%m-%d')) > 0 else 0
+    df_concluidos_mes_anterior = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_anterior) & (df_full[COLUNA_DATA_CONCLUSAO] <= fim_mes_anterior)]
+    dias_uteis_mes_anterior = np.busday_count(inicio_mes_anterior.strftime('%Y-%m-%d'), (fim_mes_anterior + timedelta(days=1)).strftime('%Y-%m-%d'))
+    media_diaria_anterior = len(df_concluidos_mes_anterior) / dias_uteis_mes_anterior if dias_uteis_mes_anterior > 0 else 0
     
     recorde_dia_valor = 0; recorde_dia_data = "N/A"; recorde_dia_qtd = 0
     if not df_concluidos_mes_atual.empty:
-        producao_diaria = df_concluidos_mes_atual.groupby(pd.to_datetime(df_concluidos_mes_atual[COLUNA_DATA_CONCLUSAO]).dt.date).size()
+        producao_diaria = df_concluidos_mes_atual.groupby(df_concluidos_mes_atual[COLUNA_DATA_CONCLUSAO].dt.date).size()
         if not producao_diaria.empty:
             recorde_dia_valor = producao_diaria.max()
             recorde_dia_data_obj = producao_diaria.idxmax()
             recorde_dia_data = recorde_dia_data_obj.strftime('%d/%m/%Y')
-            recorde_dia_qtd = df_concluidos_mes_atual[pd.to_datetime(df_concluidos_mes_atual[COLUNA_DATA_CONCLUSAO]).dt.date == recorde_dia_data_obj][COLUNA_QTD].sum()
+            recorde_dia_qtd = df_concluidos_mes_atual[df_concluidos_mes_atual[COLUNA_DATA_CONCLUSAO].dt.date == recorde_dia_data_obj][COLUNA_QTD].sum()
             
     return {"total_mes_atual": total_mes_atual_pedidos, "total_mes_atual_qtd": total_mes_atual_qtd, "media_diaria_atual": media_diaria_atual, "media_diaria_qtd": media_diaria_qtd,
             "total_mes_anterior": len(df_concluidos_mes_anterior), "media_diaria_anterior": media_diaria_anterior,
             "recorde_dia_valor": recorde_dia_valor, "recorde_dia_data": recorde_dia_data, "recorde_dia_qtd": recorde_dia_qtd}
 
+# ==============================================================================
+# FUNÇÃO CORRIGIDA
+# ==============================================================================
 def calcular_dados_grafico(df_full):
     if df_full.empty: return []
+    
+    # Filtra apenas os pedidos concluídos que têm uma data de conclusão válida
     df_concluidos = df_full.dropna(subset=[COLUNA_DATA_CONCLUSAO]).copy()
     df_concluidos = df_concluidos[df_concluidos[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()].copy()
     if df_concluidos.empty: return []
-    # ==============================================================================
-    # MODIFICAÇÃO 4: O gráfico também passa a usar a data de conclusão
-    # ==============================================================================
-    df_concluidos['Semana'] = pd.to_datetime(df_concluidos[COLUNA_DATA_CONCLUSAO]).dt.to_period('W-SUN').dt.start_time
+
+    # --- CORREÇÃO ---
+    # A lógica anterior usando .to_period() com timezones pode ser instável.
+    # Esta nova abordagem é mais robusta:
+    # 1. Extrai a data local (sem hora/fuso) da coluna de conclusão (que já está no fuso correto).
+    datas_conclusao_local = df_concluidos[COLUNA_DATA_CONCLUSAO].dt.date
+    
+    # 2. Calcula o início da semana (segunda-feira) para cada data local.
+    #    weekday() retorna 0 para segunda, 1 para terça, etc.
+    df_concluidos['Semana'] = datas_conclusao_local - pd.to_timedelta(df_concluidos[COLUNA_DATA_CONCLUSAO].dt.weekday, unit='D')
+
+    # 3. Agrupa pela 'Semana' (que agora contém objetos de data puros) e soma as quantidades.
     semanal = df_concluidos.groupby('Semana')[COLUNA_QTD].sum()
-    semanas_recentes = pd.date_range(end=datetime.now(), periods=4, freq='W-MON').normalize()
+
+    # 4. Gera o índice das últimas 4 semanas como datas locais para garantir a correspondência.
+    semanas_recentes = pd.to_datetime(pd.date_range(end=datetime.now(TZ).date(), periods=4, freq='W-MON')).date
+    
+    # 5. Reindexa os dados para garantir que todas as 4 semanas apareçam.
     semanal = semanal.reindex(semanas_recentes, fill_value=0)
+    
     return list(semanal.items())
 
 # --- STYLESHEET (Folha de Estilos) ---
@@ -218,7 +252,6 @@ STYLESHEET = f"""
 
 class PainelMtec(QMainWindow):
     # O restante da classe (toda a parte de UI com PySide6) não precisa de NENHUMA alteração.
-    # As mudanças foram feitas apenas na camada de DADOS (carregar_dados e cálculos).
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Painel de Produção MTEC"); self.setGeometry(100, 100, 1920, 1080);
@@ -267,56 +300,95 @@ class PainelMtec(QMainWindow):
         self.notification_label = QLabel(self); self.notification_label.setObjectName("NotificationLabel"); self.notification_label.setWordWrap(True); self.notification_label.hide()
 
     def setup_ui_columns(self):
-        self.prioridades_layout = QVBoxLayout(); self.prioridades_layout.setSpacing(self.scale(15))
+        self.prioridades_layout = QVBoxLayout()
+        self.prioridades_layout.setSpacing(self.scale(15))
         self.backlog_layout = QVBoxLayout()
         self.aguardando_chegada_layout = QVBoxLayout()
         self.pendentes_layout = QVBoxLayout()
         self.em_montagem_container = QWidget()
         self.em_montagem_layout = QVBoxLayout(self.em_montagem_container)
-        self.em_montagem_layout.setContentsMargins(0, self.scale(20), 0, 0); self.em_montagem_layout.setSpacing(0)
-        coluna_combinada_montagem = QVBoxLayout()
-        coluna_combinada_montagem.addLayout(self.backlog_layout)
-        coluna_combinada_montagem.addWidget(self.em_montagem_container)
-        coluna_combinada_montagem.addStretch()
+        self.em_montagem_layout.setContentsMargins(0, self.scale(20), 0, 0)
+        self.em_montagem_layout.setSpacing(0)
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(self.scale(20))
+        grid_layout.addLayout(self.backlog_layout, 0, 0)
+        grid_layout.addLayout(self.aguardando_chegada_layout, 0, 1)
+        grid_layout.addWidget(self.em_montagem_container, 1, 0)
+        grid_layout.addLayout(self.pendentes_layout, 1, 1)
+        grid_layout.setColumnStretch(0, 1)
+        grid_layout.setColumnStretch(1, 1)
+        grid_container_layout = QVBoxLayout()
+        grid_container_layout.addLayout(grid_layout)
+        grid_container_layout.addStretch()
         self.body_layout.addLayout(self.prioridades_layout, 2)
-        self.body_layout.addLayout(coluna_combinada_montagem, 1)
-        self.body_layout.addLayout(self.aguardando_chegada_layout, 1)
-        self.body_layout.addLayout(self.pendentes_layout, 1)
-        side_column_frame = QFrame(); side_column_frame.setObjectName("SideColumnFrame"); side_column_frame.setFixedWidth(self.scale(300))
+        self.body_layout.addLayout(grid_container_layout, 2)
+        side_column_frame = QFrame()
+        side_column_frame.setObjectName("SideColumnFrame")
+        side_column_frame.setFixedWidth(self.scale(300))
         self.side_layout = QVBoxLayout(side_column_frame)
-        self.concluidos_layout = QVBoxLayout(); self.cancelados_layout = QVBoxLayout()
-        self.side_layout.addLayout(self.concluidos_layout); self.side_layout.addStretch(1)
-        linea_separadora = QFrame(); linea_separadora.setFrameShape(QFrame.HLine); linea_separadora.setFrameShadow(QFrame.Sunken); linea_separadora.setStyleSheet("background-color: #444; min-height: 1px; border: none;"); self.side_layout.addWidget(linea_separadora); self.side_layout.addSpacing(20)
-        self.side_layout.addLayout(self.cancelados_layout); self.side_layout.addStretch(2)
+        self.concluidos_layout = QVBoxLayout()
+        self.cancelados_layout = QVBoxLayout()
+        self.side_layout.addLayout(self.concluidos_layout)
+        self.side_layout.addStretch(1)
+        linea_separadora = QFrame()
+        linea_separadora.setFrameShape(QFrame.HLine)
+        linea_separadora.setFrameShadow(QFrame.Sunken)
+        linea_separadora.setStyleSheet("background-color: #444; min-height: 1px; border: none;")
+        self.side_layout.addWidget(linea_separadora)
+        self.side_layout.addSpacing(20)
+        self.side_layout.addLayout(self.cancelados_layout)
+        self.side_layout.addStretch(2)
         self.body_layout.addWidget(side_column_frame)
-        self.metricas_layout = QVBoxLayout(); self.grafico_layout = QVBoxLayout(); self.kpi_layout = QVBoxLayout()
-        self.dashboard_layout.addLayout(self.metricas_layout, 1); self.dashboard_layout.addLayout(self.grafico_layout, 2); self.dashboard_layout.addStretch(1); self.dashboard_layout.addLayout(self.kpi_layout, 1)
-
+        self.metricas_layout = QVBoxLayout()
+        self.grafico_layout = QVBoxLayout()
+        self.kpi_layout = QVBoxLayout()
+        self.dashboard_layout.addLayout(self.metricas_layout, 1)
+        self.dashboard_layout.addLayout(self.grafico_layout, 2)
+        self.dashboard_layout.addStretch(1)
+        self.dashboard_layout.addLayout(self.kpi_layout, 1)
+    
     def create_persistent_widgets(self):
         self.priority_cards = []
         self.em_montagem_labels, self.pendentes_labels, self.backlog_labels, self.aguardando_chegada_labels = [], [], [], []
         self.concluidos_labels, self.cancelados_labels = [], []
+        
         self.prioridades_layout.addWidget(self.criar_titulo("PRIORIDADES", "PrioridadesTitle"))
         self.em_montagem_layout.addWidget(self.criar_titulo("EM MONTAGEM FORA DA PRIORIDADE", "EmMontagemTitle"))
         self.pendentes_layout.addWidget(self.criar_titulo("PENDENTES", "PendentesTitle"))
         self.backlog_layout.addWidget(self.criar_titulo("BACKLOG", "BacklogTitle"))
         self.aguardando_chegada_layout.addWidget(self.criar_titulo("AGUARDANDO CHEGADA", "AguardandoChegadaTitle"))
-        self.concluidos_layout.addWidget(self.criar_titulo("CONCLUÍDOS DO DIA", "ConcluidosTitle"))
-        self.cancelados_layout.addWidget(self.criar_titulo("CANCELADOS DO DIA", "CanceladosTitle"))
+        self.concluidos_layout.addWidget(self.criar_titulo("ÚLTIMOS CONCLUÍDOS", "ConcluidosTitle"))
+        self.cancelados_layout.addWidget(self.criar_titulo("ÚLTIMOS CANCELADOS", "CanceladosTitle"))
+        
         for _ in range(4):
             card = QFrame(); card.setObjectName("Card"); card_layout = QVBoxLayout(card); card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed); card.setFixedHeight(self.scale(217))
             pedido_label = QLabel(); pedido_label.setFont(QFont("Inter", self.scale(15), QFont.Bold)); pedido_label.setObjectName("CardTitle")
             status_label = QLabel(); status_label.setFont(QFont("Inter", self.scale(12)))
             servico_label = QLabel(); servico_label.setFont(QFont("Inter", self.scale(12))); servico_label.setWordWrap(True)
             equipamento_label = QLabel(); equipamento_label.setFont(QFont("Inter", self.scale(12)))
+            imagem_label = QLabel(); imagem_label.setFont(QFont("Inter", self.scale(12)))
             qtd_label = QLabel(); qtd_label.setFont(QFont("Inter", self.scale(20)))
-            info_layout = QHBoxLayout(); info_layout.addWidget(qtd_label); info_layout.addStretch()
-            card_layout.addWidget(pedido_label); card_layout.addWidget(status_label); card_layout.addWidget(equipamento_label); card_layout.addWidget(servico_label); card_layout.addLayout(info_layout)
-            refs = {'frame': card, 'pedido': pedido_label, 'status': status_label, 'servico': servico_label, 'equipamento': equipamento_label, 'qtd': qtd_label}
+            
+            info_layout = QHBoxLayout()
+            info_layout.addWidget(imagem_label)
+            info_layout.addStretch()
+            info_layout.addWidget(qtd_label)
+
+            card_layout.addWidget(pedido_label)
+            card_layout.addWidget(status_label)
+            card_layout.addWidget(equipamento_label)
+            card_layout.addWidget(servico_label)
+            card_layout.addLayout(info_layout)
+            
+            refs = {'frame': card, 'pedido': pedido_label, 'status': status_label, 
+                    'servico': servico_label, 'equipamento': equipamento_label, 
+                    'imagem': imagem_label, 'qtd': qtd_label}
+                    
             self.priority_cards.append(refs)
             self.prioridades_layout.addWidget(card)
             card.hide()
         self.prioridades_layout.addStretch()
+
         self.em_montagem_counter = self.create_list_widgets(self.em_montagem_layout, self.em_montagem_labels, 5)
         self.pendentes_counter = self.create_list_widgets(self.pendentes_layout, self.pendentes_labels, 5)
         self.backlog_counter = self.create_list_widgets(self.backlog_layout, self.backlog_labels, 5)
@@ -418,19 +490,14 @@ class PainelMtec(QMainWindow):
         self.error_container.hide(); self.main_container.show(); self.is_showing_error = False
     
     def update_colunas(self, df_principal, df_concluidos, df_cancelados, totais_concluidos, totais_cancelados):
-        # 1. Define os status que NÃO entram nos cards de prioridade
         status_excluidos_da_prioridade = [STATUS_AGUARDANDO_CHEGADA.lower(), STATUS_PENDENTE.lower()]
         
-        # 2. Cria o DataFrame de prioridades com a regra correta
         df_prioridades = df_principal[~df_principal[COLUNA_STATUS].str.lower().isin(status_excluidos_da_prioridade)]
         
-        # 3. Pega os IDs dos que foram para os cards
         pedidos_nos_cards_ids = df_prioridades.head(len(self.priority_cards))[COLUNA_PEDIDO_ID].tolist()
 
-        # 4. Atualiza os cards de prioridade
         self.update_cards_prioridade(df_prioridades)
 
-        # 5. Popula as colunas secundárias
         df_em_montagem_base = df_principal[df_principal[COLUNA_STATUS].str.lower() == STATUS_EM_MONTAGEM.lower()]
         df_em_montagem_filtrado = df_em_montagem_base[~df_em_montagem_base[COLUNA_PEDIDO_ID].isin(pedidos_nos_cards_ids)]
 
@@ -470,6 +537,7 @@ class PainelMtec(QMainWindow):
             card_ref['status'].setText(f"<font color='#BDBDBD'>Status: </font><span style='color: white; font-weight: bold;'>{row[COLUNA_STATUS]}</span>")
             card_ref['servico'].setText(f"<font color='#BDBDBD'>Serviço: </font>{row[COLUNA_SERVICO]}")
             card_ref['equipamento'].setText(f"<font color='#BDBDBD'>Equipamento: </font>{row[COLUNA_EQUIPAMENTO]}")
+            card_ref['imagem'].setText(f"<font color='#BDBDBD'>Imagem: </font>{row.get(COLUNA_IMAGEM, 'N/A')}")
             card_ref['qtd'].setText(f"<font color='#BDBDBD'><b>{row[COLUNA_QTD]}</b> máq.</font>")
             card_ref['frame'].show()
 
@@ -534,12 +602,12 @@ class PainelMtec(QMainWindow):
         self.media_diaria_valor.setText(f"{metricas['media_diaria_atual']:.1f} " \
                                         f"<font color='#999' style='font-size:{self.scale(15)}px;'>({metricas['media_diaria_qtd']:.1f} máq.)</font>")
 
-        start_of_current_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+        start_of_current_week = (datetime.now(TZ).date() - timedelta(days=datetime.now(TZ).weekday()))
         for i, (data, valor) in enumerate(dados_grafico):
             widget_ref = self.weekly_progress_widgets[i]
             fim_semana = data + timedelta(days=6)
             texto_semana = f"Semana {data.strftime('%d/%m')} a {fim_semana.strftime('%d/%m')}"
-            is_current_week = data.date() == start_of_current_week
+            is_current_week = data == start_of_current_week
             if is_current_week:
                 texto_semana = f"<b>▶ {texto_semana}</b>"
             

@@ -1,5 +1,3 @@
-# Arquivo: crud.py (Atualizado com a lógica de data_conclusao)
-
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 from flask_cors import CORS
 from sqlalchemy import create_engine, text
@@ -8,6 +6,15 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
 from functools import wraps
 import os
 from datetime import datetime
+import pytz
+
+# ==========================================================
+# IMPORTAR A FUNÇÃO DO SEU ARQUIVO DE RELATÓRIO
+from relatorios import criar_texto_relatorio
+# ==========================================================
+
+# Definir fuso horário de Brasília
+fuso_brasilia = pytz.timezone("America/Sao_Paulo")
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
@@ -43,8 +50,9 @@ class PedidosTb(Base):
     descricao_servico = Column(String)
     status_id = Column(Integer, ForeignKey('status_td.id'))
     imagem_id = Column(Integer, ForeignKey('imagem_td.id'))
-    data_criacao = Column(DateTime, default=datetime.utcnow)
-    data_conclusao = Column(DateTime)
+    # << CORREÇÃO 1: Usar DateTime(timezone=True) para que o banco armazene o fuso horário.
+    data_criacao = Column(DateTime(timezone=True), default=lambda: datetime.now(fuso_brasilia))
+    data_conclusao = Column(DateTime(timezone=True))
     quantidade = Column(Integer)
     prioridade = Column(Integer)
     perfil_alteracao = Column(String)
@@ -56,7 +64,8 @@ class HistoricoStatusTb(Base):
     pedido_id = Column(Integer, ForeignKey('pedidos_tb.id'))
     status_anterior = Column(Integer)
     status_alterado = Column(Integer)
-    data_mudanca = Column(DateTime, default=datetime.utcnow)
+    # << CORREÇÃO 2: Usar DateTime(timezone=True) aqui também.
+    data_mudanca = Column(DateTime(timezone=True), default=lambda: datetime.now(fuso_brasilia))
     alterado_por = Column(String)
 
 with app.app_context():
@@ -97,6 +106,32 @@ def logout():
 def home():
     return render_template("index.html")
 
+@app.route("/relatorios")
+@login_required
+def relatorios_page():
+    return render_template("relatorio.html")
+
+@app.route('/api/gerar-relatorio', methods=['POST'])
+@login_required
+def api_gerar_relatorio():
+    try:
+        data = request.get_json()
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+
+        if not start_date or not end_date:
+            return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
+
+        texto_do_relatorio = criar_texto_relatorio(start_date, end_date)
+        
+        return jsonify({'relatorio': texto_do_relatorio})
+    
+    except Exception as e:
+        print(f"Erro ao gerar relatório: {e}")
+        return jsonify({'error': 'Ocorreu um erro interno ao gerar o relatório'}), 500
+
+# --- ROTAS EXISTENTES ---
+
 @app.route("/pedidos", methods=["GET"])
 @login_required
 def get_pedidos():
@@ -122,12 +157,13 @@ def get_pedidos():
     if filtro_tab in ['concluido', 'cancelado']:
         coluna_data_filtro = "p.data_conclusao"
 
+    # << CORREÇÃO 3: Ajustar o fuso horário nos filtros de data, assim como foi feito no relatório.
     if busca_mes:
-        where_conditions.append(f"EXTRACT(MONTH FROM {coluna_data_filtro}) = :mes")
+        where_conditions.append(f"EXTRACT(MONTH FROM {coluna_data_filtro} AT TIME ZONE 'America/Sao_Paulo') = :mes")
         params['mes'] = int(busca_mes)
     
     if busca_ano and busca_ano.isdigit() and len(busca_ano) == 4:
-        where_conditions.append(f"EXTRACT(YEAR FROM {coluna_data_filtro}) = :ano")
+        where_conditions.append(f"EXTRACT(YEAR FROM {coluna_data_filtro} AT TIME ZONE 'America/Sao_Paulo') = :ano")
         params['ano'] = int(busca_ano)
 
     query_sql = """
@@ -144,7 +180,6 @@ def get_pedidos():
     if where_conditions:
         query_sql += " WHERE " + " AND ".join(where_conditions)
     
-    # Ordenação correta: primeiro os urgentes, depois pela prioridade numérica.
     query_sql += " ORDER BY p.urgente DESC, p.prioridade ASC"
 
     with engine.connect() as conn:
@@ -157,7 +192,7 @@ def get_pedidos():
 def add_pedido():
     data = request.json
     username = session.get('username', 'Desconhecido')
-    data_criacao = datetime.now()
+    data_criacao = datetime.now(fuso_brasilia)
     urgente = data.get('urgente', False)
 
     with engine.connect() as conn:
@@ -206,9 +241,9 @@ def update_pedido(pedido_id):
                 "prioridade": prioridade_atual
             }
 
-            if novo_status_id in [4, 6]:
+            if novo_status_id in [4, 6] and status_anterior_id not in [4, 6]:
                 query_update_sql += ", data_conclusao = :data_conclusao"
-                params["data_conclusao"] = datetime.now()
+                params["data_conclusao"] = datetime.now(fuso_brasilia)
 
             query_update_sql += " WHERE id=:id"
             conn.execute(text(query_update_sql), params)
@@ -216,7 +251,7 @@ def update_pedido(pedido_id):
             if status_anterior_id != novo_status_id:
                 conn.execute(
                     text("INSERT INTO public.historico_status_tb (pedido_id, status_anterior, status_alterado, data_mudanca, alterado_por) VALUES (:pedido_id, :status_anterior, :status_alterado, :data_mudanca, :alterado_por)"),
-                    {"pedido_id": pedido_id, "status_anterior": status_anterior_id, "status_alterado": novo_status_id, "data_mudanca": datetime.now(), "alterado_por": username}
+                    {"pedido_id": pedido_id, "status_anterior": status_anterior_id, "status_alterado": novo_status_id, "data_mudanca": datetime.now(fuso_brasilia), "alterado_por": username}
                 )
 
     return jsonify({"mensagem": "Pedido atualizado!"})
@@ -268,4 +303,3 @@ def get_historico_pedido(pedido_id):
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
-
