@@ -84,6 +84,23 @@ docker compose up -d --build
 ```bash
 docker compose exec app python app/migracao_dados.py
 ```
+### Tabela status_tb
+```bash
+1	"Aguardando Chegada"
+2	"Backlog"
+3	"Em Montagem"
+4	"Concluído"
+5	"Pendente"
+6	"Cancelado"
+```
+### Tabela imagem_tb
+```bash
+1	"W11 PRO"
+2	"W11 PRO ETQ"
+3	"Linux"
+4	"SLUI (SOLUÇÃO DE PROBLEMAS)"
+5	"FREEDOS"
+```
 
 ---
 
