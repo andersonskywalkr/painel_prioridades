@@ -35,7 +35,7 @@ def to_brasilia(series):
 
 # --- CONFIGURAÇÃO GERAL E DE DADOS ---
 SCALE_FACTOR = 0.8
-META_SEMANAL = 500
+META_SEMANAL = 200
 
 # --- NOVAS CONFIGURAÇÕES DE BANCO DE DADOS POSTGRESQL ---
 DB_HOST = "localhost"
@@ -66,16 +66,18 @@ def get_db_connection():
     except psycopg2.Error as e:
         raise Exception(f"Erro ao conectar ao banco de dados: {e}")
 
-# --- LÓGICA DE DADOS REESCRITA PARA USAR O BANCO DE DADOS ---
+# --- LÓGICA DE DADOS REESCRITA E CORRIGIDA ---
 def carregar_dados():
     """Carrega todos os dados diretamente do banco de dados PostgreSQL."""
     print(f"Carregando dados do banco de dados: {DB_NAME}...")
     conn = None
     try:
         conn = get_db_connection()
+        # CORREÇÃO 1: Adicionado p.status_id à consulta para permitir filtragem numérica
         query = f"""
             SELECT 
                 p.id AS "{COLUNA_PEDIDO_ID}",
+                p.status_id,
                 p.equipamento AS "{COLUNA_EQUIPAMENTO}",
                 p.pv AS "{COLUNA_PV}",
                 p.descricao_servico AS "{COLUNA_SERVICO}",
@@ -116,53 +118,74 @@ def carregar_dados():
     # --- Processamento dos dados ---
     df_full = df.copy()
     
-    # Converte as colunas de data para o fuso de Brasília (tz-aware)
     df_full[COLUNA_DATA_STATUS] = to_brasilia(df_full[COLUNA_DATA_STATUS])
     df_full[COLUNA_DATA_CONCLUSAO] = to_brasilia(df_full[COLUNA_DATA_CONCLUSAO])
-
     df_full[COLUNA_STATUS] = df_full[COLUNA_STATUS].astype(str).str.strip()
     df_full.rename(columns={COLUNA_URGENTE: 'is_urgent'}, inplace=True, errors='ignore')
-
-    status_finalizados = [STATUS_CONCLUIDO.lower(), STATUS_CANCELADO.lower()]
-    df_principal = df_full[~df_full[COLUNA_STATUS].str.lower().isin(status_finalizados)].copy()
     
-    # Use agora no fuso de Brasília
-    hoje = datetime.now(TZ).date()
-    
-    # Usar data de conclusão para concluídos/cancelados do dia
-    df_concluidos_hoje = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO].dt.date == hoje)].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
-    df_cancelados = df_full[df_full[COLUNA_STATUS].str.lower() == STATUS_CANCELADO.lower()].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
+    # --- CORREÇÃO 2: Usar IDs numéricos para toda a filtragem de status ---
+    STATUS_ID_CONCLUIDO = 4
+    STATUS_ID_CANCELADO = 6
 
+    hoje_obj = datetime.now(TZ)
+    inicio_do_dia = hoje_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+    fim_do_dia = hoje_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    df_finalizados = df_full.dropna(subset=[COLUNA_DATA_CONCLUSAO]).copy()
+
+    df_concluidos_dia = df_finalizados[
+        (df_finalizados['status_id'] == STATUS_ID_CONCLUIDO) &
+        (df_finalizados[COLUNA_DATA_CONCLUSAO] >= inicio_do_dia) &
+        (df_finalizados[COLUNA_DATA_CONCLUSAO] <= fim_do_dia)
+    ].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
+    
+    df_cancelados_dia = df_finalizados[
+        (df_finalizados['status_id'] == STATUS_ID_CANCELADO) &
+        (df_finalizados[COLUNA_DATA_CONCLUSAO] >= inicio_do_dia) &
+        (df_finalizados[COLUNA_DATA_CONCLUSAO] <= fim_do_dia)
+    ].sort_values(by=COLUNA_DATA_CONCLUSAO, ascending=False)
+    
+    # DataFrame principal agora é filtrado por ID, o que é mais seguro
+    status_finalizados_ids_lista = [STATUS_ID_CONCLUIDO, STATUS_ID_CANCELADO]
+    df_principal = df_full[~df_full['status_id'].isin(status_finalizados_ids_lista)].copy()
+    
     if not df_principal.empty:
         df_principal = df_principal.reset_index(drop=True)
         df_principal['Prioridade_Display'] = df_principal.index + 1
 
-    # Cálculos dos totais
-    is_teravix_concluido = df_concluidos_hoje[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
-    is_teravix_cancelado = df_cancelados[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
+    # Cálculos de totais continuam funcionando, pois dependem dos DataFrames já corrigidos
+    is_teravix_concluido = df_concluidos_dia[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
+    teravix_concluidos_qtd = df_concluidos_dia.loc[is_teravix_concluido, COLUNA_QTD].sum()
+    pv_concluidos_qtd = df_concluidos_dia.loc[~is_teravix_concluido, COLUNA_QTD].sum()
+    totais_concluidos = (len(df_concluidos_dia[is_teravix_concluido]), len(df_concluidos_dia[~is_teravix_concluido]), len(df_concluidos_dia),
+                         teravix_concluidos_qtd, pv_concluidos_qtd, df_concluidos_dia[COLUNA_QTD].sum())
 
-    teravix_concluidos_qtd = df_concluidos_hoje.loc[is_teravix_concluido, COLUNA_QTD].sum()
-    pv_concluidos_qtd = df_concluidos_hoje.loc[~is_teravix_concluido, COLUNA_QTD].sum()
-    totais_concluidos = (len(df_concluidos_hoje[is_teravix_concluido]), len(df_concluidos_hoje[~is_teravix_concluido]), len(df_concluidos_hoje),
-                         teravix_concluidos_qtd, pv_concluidos_qtd, df_concluidos_hoje[COLUNA_QTD].sum())
+    is_teravix_cancelado = df_cancelados_dia[COLUNA_PV].astype(str).str.contains('TERAVIX', na=False, case=False)
+    teravix_cancelados_qtd = df_cancelados_dia.loc[is_teravix_cancelado, COLUNA_QTD].sum()
+    pv_cancelados_qtd = df_cancelados_dia.loc[~is_teravix_cancelado, COLUNA_QTD].sum()
+    totais_cancelados = (len(df_cancelados_dia[is_teravix_cancelado]), len(df_cancelados_dia[~is_teravix_cancelado]), len(df_cancelados_dia),
+                         teravix_cancelados_qtd, pv_cancelados_qtd, df_cancelados_dia[COLUNA_QTD].sum())
 
-    teravix_cancelados_qtd = df_cancelados.loc[is_teravix_cancelado, COLUNA_QTD].sum()
-    pv_cancelados_qtd = df_cancelados.loc[~is_teravix_cancelado, COLUNA_QTD].sum()
-    totais_cancelados = (len(df_cancelados[is_teravix_cancelado]), len(df_cancelados[~is_teravix_cancelado]), len(df_cancelados),
-                         teravix_cancelados_qtd, pv_cancelados_qtd, df_cancelados[COLUNA_QTD].sum())
-
-    return df_full, df_principal, df_concluidos_hoje, df_cancelados, totais_concluidos, totais_cancelados
+    return df_full, df_principal, df_concluidos_dia, df_cancelados_dia, totais_concluidos, totais_cancelados
 
 
 def calcular_metricas_dashboard(df_full):
-    if df_full.empty:
+    if df_full.empty or 'status_id' not in df_full.columns:
         return {"total_mes_atual": 0, "total_mes_atual_qtd": 0, "media_diaria_atual": 0, "media_diaria_qtd": 0,
                 "total_mes_anterior": 0, "media_diaria_anterior": 0,
                 "recorde_dia_valor": 0, "recorde_dia_data": "N/A", "recorde_dia_qtd": 0}
+
+    # CORREÇÃO 3: Usar ID numérico para filtrar métricas
+    STATUS_ID_CONCLUIDO = 4
+    
     hoje = datetime.now(TZ)
     inicio_mes_atual = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    df_concluidos_mes_atual = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_atual) & (df_full[COLUNA_DATA_CONCLUSAO] <= hoje)]
+    df_concluidos_mes_atual = df_full[
+        (df_full['status_id'] == STATUS_ID_CONCLUIDO) & 
+        (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_atual) & 
+        (df_full[COLUNA_DATA_CONCLUSAO] <= hoje)
+    ]
     
     total_mes_atual_pedidos = len(df_concluidos_mes_atual)
     total_mes_atual_qtd = df_concluidos_mes_atual[COLUNA_QTD].sum()
@@ -171,7 +194,11 @@ def calcular_metricas_dashboard(df_full):
     media_diaria_qtd = total_mes_atual_qtd / dias_uteis_mes_atual if dias_uteis_mes_atual > 0 else 0
     
     fim_mes_anterior = inicio_mes_atual - timedelta(days=1); inicio_mes_anterior = fim_mes_anterior.replace(day=1)
-    df_concluidos_mes_anterior = df_full[(df_full[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()) & (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_anterior) & (df_full[COLUNA_DATA_CONCLUSAO] <= fim_mes_anterior)]
+    df_concluidos_mes_anterior = df_full[
+        (df_full['status_id'] == STATUS_ID_CONCLUIDO) & 
+        (df_full[COLUNA_DATA_CONCLUSAO] >= inicio_mes_anterior) & 
+        (df_full[COLUNA_DATA_CONCLUSAO] <= fim_mes_anterior)
+    ]
     dias_uteis_mes_anterior = np.busday_count(inicio_mes_anterior.strftime('%Y-%m-%d'), (fim_mes_anterior + timedelta(days=1)).strftime('%Y-%m-%d'))
     media_diaria_anterior = len(df_concluidos_mes_anterior) / dias_uteis_mes_anterior if dias_uteis_mes_anterior > 0 else 0
     
@@ -188,41 +215,24 @@ def calcular_metricas_dashboard(df_full):
             "total_mes_anterior": len(df_concluidos_mes_anterior), "media_diaria_anterior": media_diaria_anterior,
             "recorde_dia_valor": recorde_dia_valor, "recorde_dia_data": recorde_dia_data, "recorde_dia_qtd": recorde_dia_qtd}
 
-# ==============================================================================
-# FUNÇÃO CORRIGIDA
-# ==============================================================================
 def calcular_dados_grafico(df_full):
-    if df_full.empty:
+    if df_full.empty or 'status_id' not in df_full.columns:
         return []
     
-    # Filtra apenas os pedidos concluídos que têm uma data de conclusão válida
+    # CORREÇÃO 4: Usar ID numérico para filtrar dados do gráfico
+    STATUS_ID_CONCLUIDO = 4
+
     df_concluidos = df_full.dropna(subset=[COLUNA_DATA_CONCLUSAO]).copy()
-    df_concluidos = df_concluidos[df_concluidos[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()]
+    df_concluidos = df_concluidos[df_concluidos['status_id'] == STATUS_ID_CONCLUIDO]
     if df_concluidos.empty:
         return []
 
-    # --- CORREÇÃO APLICADA ---
-    # 1. Garante que a coluna de data/hora esteja no formato correto do Pandas (Timestamp).
-    #    A função to_brasilia já faz isso, mas pd.to_datetime é uma garantia extra.
     datas_conclusao = pd.to_datetime(df_concluidos[COLUNA_DATA_CONCLUSAO])
-
-    # 2. Calcula o início da semana (segunda-feira) diretamente na série de Timestamps.
-    #    A operação (Timestamp - Timedelta) funciona perfeitamente.
     inicio_da_semana = datas_conclusao - pd.to_timedelta(datas_conclusao.dt.weekday, unit='D')
-
-    # 3. Normaliza o resultado para conter apenas a data (removendo a hora 00:00:00).
-    #    Isso cria uma coluna de objetos `datetime.date`, que é ideal para agrupar.
     df_concluidos['Semana'] = inicio_da_semana.dt.date
-    
-    # 4. Agrupa pela 'Semana' e soma as quantidades.
     semanal = df_concluidos.groupby('Semana')[COLUNA_QTD].sum()
-
-    # 5. Gera o índice das últimas 4 semanas como datas para garantir a correspondência.
-    #    O final do date_range deve ser a data de hoje para incluir a semana atual.
     hoje = datetime.now(TZ).date()
     semanas_recentes = pd.to_datetime(pd.date_range(end=hoje, periods=4, freq='W-MON')).date
-    
-    # 6. Reindexa os dados para garantir que todas as 4 semanas apareçam, preenchendo com 0.
     semanal = semanal.reindex(semanas_recentes, fill_value=0)
     
     return list(semanal.items())
@@ -642,3 +652,4 @@ if __name__ == "__main__":
     window = PainelMtec()
     window.showFullScreen() 
     sys.exit(app.exec())
+
