@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Usuários - Painel MTEC{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2">Gerenciamento de Usuários</h1>
+        <button id="btnAdicionarUsuario" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalUsuario">
+            <i class="fas fa-plus-circle me-2"></i>Adicionar Novo Usuário
+        </button>
+    </div>
+
+    <div class="card" style="background-color: var(--dark-card); border-color: var(--dark-border);">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" style="color: var(--light-text);">
+                    <thead>
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">Username</th>
+                            <th scope="col">Nome Completo</th>
+                            <th scope="col">Nível de Acesso</th>
+                            <th scope="col">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-usuarios-corpo">
+                        <!-- Linhas serão inseridas aqui via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MUDANÇA 1: Modal com o formulário de cadastro -->
+<div class="modal fade" id="modalUsuario" tabindex="-1" aria-labelledby="modalUsuarioLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background-color: var(--dark-card);">
+            <form id="formUsuario">
+                <div class="modal-header" style="border-color: var(--dark-border);">
+                    <h5 class="modal-title" id="modalUsuarioLabel">Adicionar Novo Usuário</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="alerta-modal-usuario" class="alert alert-danger d-none" role="alert"></div>
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="nomeCompleto" class="form-label">Nome Completo</label>
+                        <input type="text" class="form-control" id="nomeCompleto" name="nome_completo" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">Confirmar Senha</label>
+                        <input type="password" class="form-control" id="confirmPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="nivelAcesso" class="form-label">Nível de Acesso</label>
+                        <select class="form-select" id="nivelAcesso" name="nivel_acesso" required>
+                            <option value="operador" selected>Operador</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-color: var(--dark-border);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Usuário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    carregarUsuarios();
+
+    // MUDANÇA 2: Lógica para enviar o formulário
+    const formUsuario = document.getElementById('formUsuario');
+    formUsuario.addEventListener('submit', function(event) {
+        event.preventDefault(); // Impede o envio tradicional do formulário
+        salvarUsuario();
+    });
+
+    // Limpar o formulário quando o modal for fechado
+    const modalUsuario = document.getElementById('modalUsuario');
+    modalUsuario.addEventListener('hidden.bs.modal', function () {
+        formUsuario.reset();
+        document.getElementById('alerta-modal-usuario').classList.add('d-none');
+    });
+});
+
+function salvarUsuario() {
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const alerta = document.getElementById('alerta-modal-usuario');
+
+    if (password !== confirmPassword) {
+        alerta.textContent = 'As senhas não coincidem.';
+        alerta.classList.remove('d-none');
+        return;
+    }
+
+    const formData = new FormData(document.getElementById('formUsuario'));
+    const data = Object.fromEntries(formData.entries());
+
+    fetch('/api/usuarios', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.erro) {
+            alerta.textContent = result.erro;
+            alerta.classList.remove('d-none');
+        } else {
+            // Sucesso!
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('modalUsuario'));
+            modalInstance.hide();
+            showToast(result.mensagem, 'success'); // Função showToast precisa existir no base.html
+            carregarUsuarios(); // Recarrega a lista para mostrar o novo usuário
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao salvar usuário:', error);
+        alerta.textContent = 'Ocorreu um erro inesperado. Tente novamente.';
+        alerta.classList.remove('d-none');
+    });
+}
+
+function carregarUsuarios() {
+    fetch('/api/usuarios')
+        .then(response => {
+            if (!response.ok) throw new Error('Falha ao carregar usuários');
+            return response.json();
+        })
+        .then(usuarios => {
+            const corpoTabela = document.getElementById('tabela-usuarios-corpo');
+            corpoTabela.innerHTML = ''; 
+
+            if (usuarios.length === 0) {
+                corpoTabela.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum usuário encontrado.</td></tr>';
+                return;
+            }
+
+            usuarios.forEach(usuario => {
+                const linha = `
+                    <tr>
+                        <td>${usuario.id}</td>
+                        <td>${usuario.username}</td>
+                        <td>${usuario.nome_completo}</td>
+                        <td><span class="badge ${usuario.nivel_acesso === 'admin' ? 'bg-primary' : 'bg-secondary'}">${usuario.nivel_acesso}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-warning me-2" disabled title="Editar (em breve)"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" disabled title="Excluir (em breve)"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+                corpoTabela.innerHTML += linha;
+            });
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            document.getElementById('tabela-usuarios-corpo').innerHTML = `<tr><td colspan="5" class="text-center text-danger">Erro ao carregar os dados.</td></tr>`;
+        });
+}
+
+// Adicione esta função ao seu base.html ou aqui para os toasts funcionarem
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container');
+    const toastId = 'toast-' + Date.now();
+    const toastHTML = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    toastContainer.innerHTML += toastHTML;
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+}
+</script>
+{% endblock %}
+
