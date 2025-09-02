@@ -9,12 +9,6 @@ import pytz
 # Adicionado para hash de senha
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# ==========================================================
-# IMPORTAR A FUNÇÃO DO SEU ARQUIVO DE RELATÓRIO
-# Certifique-se de que o arquivo relatorios.py está na mesma pasta
-# from relatorios import criar_texto_relatorio # Descomente quando estiver pronto
-# ==========================================================
-
 # Definir fuso horário de Brasília
 fuso_brasilia = pytz.timezone("America/Sao_Paulo")
 
