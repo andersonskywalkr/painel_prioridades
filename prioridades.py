@@ -9,7 +9,7 @@ import numpy as np
 import time
 import traceback
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                               QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton, QGridLayout)
+                             QHBoxLayout, QLabel, QFrame, QProgressBar, QSizePolicy, QPushButton, QGridLayout)
 from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtCore import QTimer, Qt
 
@@ -89,7 +89,7 @@ def carregar_dados():
                 pedidos_tb p
             JOIN
                 status_td s ON p.status_id = s.id
-            LEFT JOIN                           
+            LEFT JOIN                               
                 imagem_td i ON p.imagem_id = i.id 
             ORDER BY
                 p.urgente DESC, p.prioridade ASC;
@@ -192,30 +192,37 @@ def calcular_metricas_dashboard(df_full):
 # FUNÇÃO CORRIGIDA
 # ==============================================================================
 def calcular_dados_grafico(df_full):
-    if df_full.empty: return []
+    if df_full.empty:
+        return []
     
     # Filtra apenas os pedidos concluídos que têm uma data de conclusão válida
     df_concluidos = df_full.dropna(subset=[COLUNA_DATA_CONCLUSAO]).copy()
-    df_concluidos = df_concluidos[df_concluidos[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()].copy()
-    if df_concluidos.empty: return []
+    df_concluidos = df_concluidos[df_concluidos[COLUNA_STATUS].str.lower() == STATUS_CONCLUIDO.lower()]
+    if df_concluidos.empty:
+        return []
 
-    # --- CORREÇÃO ---
-    # A lógica anterior usando .to_period() com timezones pode ser instável.
-    # Esta nova abordagem é mais robusta:
-    # 1. Extrai a data local (sem hora/fuso) da coluna de conclusão (que já está no fuso correto).
-    datas_conclusao_local = df_concluidos[COLUNA_DATA_CONCLUSAO].dt.date
+    # --- CORREÇÃO APLICADA ---
+    # 1. Garante que a coluna de data/hora esteja no formato correto do Pandas (Timestamp).
+    #    A função to_brasilia já faz isso, mas pd.to_datetime é uma garantia extra.
+    datas_conclusao = pd.to_datetime(df_concluidos[COLUNA_DATA_CONCLUSAO])
+
+    # 2. Calcula o início da semana (segunda-feira) diretamente na série de Timestamps.
+    #    A operação (Timestamp - Timedelta) funciona perfeitamente.
+    inicio_da_semana = datas_conclusao - pd.to_timedelta(datas_conclusao.dt.weekday, unit='D')
+
+    # 3. Normaliza o resultado para conter apenas a data (removendo a hora 00:00:00).
+    #    Isso cria uma coluna de objetos `datetime.date`, que é ideal para agrupar.
+    df_concluidos['Semana'] = inicio_da_semana.dt.date
     
-    # 2. Calcula o início da semana (segunda-feira) para cada data local.
-    #    weekday() retorna 0 para segunda, 1 para terça, etc.
-    df_concluidos['Semana'] = datas_conclusao_local - pd.to_timedelta(df_concluidos[COLUNA_DATA_CONCLUSAO].dt.weekday, unit='D')
-
-    # 3. Agrupa pela 'Semana' (que agora contém objetos de data puros) e soma as quantidades.
+    # 4. Agrupa pela 'Semana' e soma as quantidades.
     semanal = df_concluidos.groupby('Semana')[COLUNA_QTD].sum()
 
-    # 4. Gera o índice das últimas 4 semanas como datas locais para garantir a correspondência.
-    semanas_recentes = pd.to_datetime(pd.date_range(end=datetime.now(TZ).date(), periods=4, freq='W-MON')).date
+    # 5. Gera o índice das últimas 4 semanas como datas para garantir a correspondência.
+    #    O final do date_range deve ser a data de hoje para incluir a semana atual.
+    hoje = datetime.now(TZ).date()
+    semanas_recentes = pd.to_datetime(pd.date_range(end=hoje, periods=4, freq='W-MON')).date
     
-    # 5. Reindexa os dados para garantir que todas as 4 semanas apareçam.
+    # 6. Reindexa os dados para garantir que todas as 4 semanas apareçam, preenchendo com 0.
     semanal = semanal.reindex(semanas_recentes, fill_value=0)
     
     return list(semanal.items())
@@ -531,7 +538,7 @@ class PainelMtec(QMainWindow):
             
             titulo_card = f"<b>PV: {row[COLUNA_PV]}</b> ({row['Prioridade_Display']}ª Prioridade)"
             if row.get('is_urgent', False):
-                 titulo_card = f"<b>PV: {row[COLUNA_PV]}</b> <font color='#E74C3C'>(URGENTE)</font>"
+                titulo_card = f"<b>PV: {row[COLUNA_PV]}</b> <font color='#E74C3C'>(URGENTE)</font>"
 
             card_ref['pedido'].setText(titulo_card)
             card_ref['status'].setText(f"<font color='#BDBDBD'>Status: </font><span style='color: white; font-weight: bold;'>{row[COLUNA_STATUS]}</span>")

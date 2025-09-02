@@ -15,7 +15,7 @@
             --light-text: #FFFFFF; /* Texto claro (branco do logo) */
             --secondary-text: #cccccc; /* Texto secundário (cinza claro para legibilidade) */
         }
-        }
+        
         body {
             font-family: 'Poppins', sans-serif;
             background-color: var(--dark-bg);
@@ -33,7 +33,6 @@
             color: #FFFFFF !important; /* Alterado para branco puro para melhor contraste */
             font-weight: 600;      /* Texto um pouco mais forte para indicar que está ativo */
         }
-        /* A chave extra '}' foi removida daqui */
     </style>
     {% block head_styles %}{% endblock %}
 </head>
@@ -52,18 +51,39 @@
             <div class="collapse navbar-collapse" id="mainNav">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">Painel de Pedidos</a>
+                        <a class="nav-link {% if request.path == url_for('home') %}active{% endif %}" href="{{ url_for('home') }}">Painel de Pedidos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/relatorios' %}active{% endif %}" href="/relatorios">Gerador de Relatórios</a>
+                        <a class="nav-link {% if request.path == url_for('relatorios_page') %}active{% endif %}" href="{{ url_for('relatorios_page') }}">Gerador de Relatórios</a>
                     </li>
+                    <!-- ALTERAÇÃO 1: Adicionado o link de gerenciamento de usuários, visível apenas para admins -->
+                    {% if session.nivel_acesso == 'admin' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == url_for('usuarios_page') %}active{% endif %}" href="{{ url_for('usuarios_page') }}">Gerenciar Usuários</a>
+                    </li>
+                    {% endif %}
                 </ul>
-                <a href="/logout" class="btn btn-outline-danger"><i class="fas fa-sign-out-alt"></i> Sair</a>
+                <span class="navbar-text text-white-50 me-3">
+                    Logado como: <strong>{{ session.username }}</strong>
+                </span>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
         </div>
     </nav>
 
     <div class="main-container">
+        <!-- ALTERAÇÃO 2: Adicionado o bloco para exibir mensagens de feedback (flash messages) -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         {% block content %}{% endblock %}
     </div>
 
