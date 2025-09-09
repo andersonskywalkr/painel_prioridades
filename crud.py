@@ -264,6 +264,112 @@ def get_pedidos():
         pedidos = [dict(row._mapping) for row in result]
     return jsonify(pedidos)
 
+@app.route("/api/gerar-relatorio", methods=['POST'])
+@login_required
+def gerar_relatorio_api():
+    db_session = SessionLocal()
+    try:
+        data = request.get_json()
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date')
+
+        if not start_date_str or not end_date_str:
+            return jsonify({'error': 'As datas de início e fim são obrigatórias.'}), 400
+
+        # Converte as datas para o formato do banco de dados
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, tzinfo=fuso_brasilia)
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=fuso_brasilia)
+        
+        # --- As queries continuam as mesmas ---
+        query_realizadas = text("""
+            SELECT
+                CASE WHEN p.equipamento ILIKE '%teravix%' THEN 'OP' ELSE 'PV' END as tipo,
+                COUNT(DISTINCT p.pv) as total_pedidos,
+                COALESCE(SUM(p.quantidade), 0) as total_unidades
+            FROM pedidos_tb p
+            JOIN status_td s ON p.status_id = s.id
+            WHERE s.nome_status = 'Concluído'
+              AND p.data_conclusao BETWEEN :start_date AND :end_date
+            GROUP BY tipo;
+        """)
+        
+        query_atuais = text("""
+            SELECT
+                s.nome_status as status,
+                CASE WHEN p.equipamento ILIKE '%teravix%' THEN 'OP' ELSE 'PV' END as tipo,
+                COUNT(DISTINCT p.pv) as total_pedidos,
+                COALESCE(SUM(p.quantidade), 0) as total_unidades
+            FROM pedidos_tb p
+            JOIN status_td s ON p.status_id = s.id
+            WHERE s.nome_status IN ('Backlog', 'Em Montagem')
+            GROUP BY status, tipo
+            ORDER BY status, tipo;
+        """)
+
+        result_realizadas = db_session.execute(query_realizadas, {"start_date": start_date, "end_date": end_date}).mappings().all()
+        result_atuais = db_session.execute(query_atuais).mappings().all()
+
+        dados = {
+            'realizadas': {'PV': None, 'OP': None},
+            'backlog': {'PV': None, 'OP': None},
+            'montagem': {'PV': None, 'OP': None}
+        }
+        for row in result_realizadas:
+            dados['realizadas'][row['tipo']] = {'pedidos': row['total_pedidos'], 'unidades': row['total_unidades']}
+        for row in result_atuais:
+            if row['status'] == 'Backlog':
+                dados['backlog'][row['tipo']] = {'pedidos': row['total_pedidos'], 'unidades': row['total_unidades']}
+            elif row['status'] == 'Em Montagem':
+                dados['montagem'][row['tipo']] = {'pedidos': row['total_pedidos'], 'unidades': row['total_unidades']}
+        
+        # --- 4. Formata o texto do relatório COM TAGS HTML ---
+        data_formatada = datetime.strptime(end_date_str, '%Y-%m-%d').strftime('%d/%m/%Y')
+        if start_date_str != end_date_str:
+            data_formatada = f"{datetime.strptime(start_date_str, '%Y-%m-%d').strftime('%d/%m/%Y')} a {data_formatada}"
+
+        # Adicionamos a tag <u> para sublinhar a data
+        relatorio_texto = f"Relatório de Atividades - <u>{data_formatada}</u>\n"
+        relatorio_texto += "=" * 40 + "\n\n"
+
+        # Seção: Atividades Realizadas (com tags <strong> e <u>)
+        relatorio_texto += "<strong><u>Atividades Realizadas:</u></strong>\n"
+        if dados['realizadas']['PV']:
+            pv = dados['realizadas']['PV']
+            # Adicionamos espaços no início para o recuo
+            relatorio_texto += f"    • {pv['pedidos']} PV com {pv['unidades']} unidades\n"
+        if dados['realizadas']['OP']:
+            op = dados['realizadas']['OP']
+            relatorio_texto += f"    • {op['pedidos']} OP com {op['unidades']} unidades de Teravix\n"
+        
+        relatorio_texto += "\n"
+
+        # Seção: Backlog (com tags <strong> e <u>)
+        relatorio_texto += "<strong><u>Backlog:</u></strong>\n"
+        if dados['backlog']['PV']:
+            pv = dados['backlog']['PV']
+            relatorio_texto += f"    • {pv['pedidos']} PV com {pv['unidades']} unidades\n"
+        if dados['backlog']['OP']:
+            op = dados['backlog']['OP']
+            relatorio_texto += f"    • {op['pedidos']} OP com {op['unidades']} unidades de Teravix\n"
+            
+        relatorio_texto += "\n"
+
+        # Seção: Em Montagem (com tags <strong> e <u>)
+        relatorio_texto += "<strong><u>Em Montagem:</u></strong>\n"
+        if dados['montagem']['PV']:
+            pv = dados['montagem']['PV']
+            relatorio_texto += f"    • {pv['pedidos']} PV com {pv['unidades']} unidades\n"
+        if dados['montagem']['OP']:
+            op = dados['montagem']['OP']
+            relatorio_texto += f"    • {op['pedidos']} OP com {op['unidades']} unidades de Teravix\n"
+
+        return jsonify({'relatorio': relatorio_texto.strip()})
+
+    except Exception as e:
+        print(f"Erro ao gerar relatório: {e}")
+        return jsonify({'error': f'Ocorreu um erro interno no servidor: {e}'}), 500
+    finally:
+        db_session.close()
 
 @app.route("/pedidos", methods=["POST"])
 @login_required

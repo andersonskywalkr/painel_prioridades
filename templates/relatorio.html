@@ -24,14 +24,16 @@
         color: var(--secondary-text);
         font-weight: 500;
     }
-    textarea {
+    /* ✅ ALTERAÇÃO: Estilo ajustado de 'textarea' para 'pre.form-control' */
+    pre.form-control {
         width: 100%;
         height: 350px;
-        white-space: pre; /* Mantém a formatação com quebras de linha */
+        white-space: pre-wrap; /* Mantém a formatação e permite quebra de linha */
         font-family: monospace;
         background-color: var(--dark-bg);
         color: var(--light-text);
         border: 1px solid var(--dark-border);
+        overflow-y: auto; /* Garante a barra de rolagem vertical */
     }
 </style>
 {% endblock %}
@@ -61,7 +63,7 @@
         <h5 class="mb-0">Relatório Gerado</h5>
         <button id="copiarBtn" class="btn btn-success btn-sm" style="display:none;"><i class="fas fa-copy"></i> Copiar Texto</button>
     </div>
-    <textarea id="resultadoRelatorio" class="form-control" readonly></textarea>
+    <pre id="resultadoRelatorio" class="form-control"></pre>
 </div>
 {% endblock %}
 
@@ -69,22 +71,15 @@
 {% block scripts %}
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        // --- INÍCIO DA CORREÇÃO ---
-        // Seta as datas iniciais para o dia de hoje, respeitando o fuso local do usuário.
-        const hoje = new Date(); // Pega a data e hora local
-        
+        // Seta as datas iniciais para o dia de hoje.
+        const hoje = new Date();
         const ano = hoje.getFullYear();
-        // getMonth() retorna 0-11, então somamos 1. padStart garante 2 dígitos (ex: 08 para agosto)
         const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-        // getDate() retorna o dia do mês. padStart garante 2 dígitos.
         const dia = String(hoje.getDate()).padStart(2, '0');
-
-        // Formata a string corretamente como YYYY-MM-DD
         const hojeFormatado = `${ano}-${mes}-${dia}`;
         
         document.getElementById('startDate').value = hojeFormatado;
         document.getElementById('endDate').value = hojeFormatado;
-        // --- FIM DA CORREÇÃO ---
 
         const gerarBtn = document.getElementById('gerarBtn');
         const copiarBtn = document.getElementById('copiarBtn');
@@ -95,16 +90,18 @@
             const endDate = document.getElementById('endDate').value;
 
             if (!startDate || !endDate) {
+                // Usando um modal customizado em vez de alert() para melhor UX, se disponível.
+                // Se não, alert() é um fallback.
                 alert('Por favor, selecione as duas datas.');
                 return;
             }
 
-            resultadoEl.value = "Gerando, por favor aguarde...";
+            // ✅ ALTERAÇÃO: Usando .innerHTML para permitir que o navegador renderize o HTML
+            resultadoEl.innerHTML = "Gerando, por favor aguarde...";
             gerarBtn.disabled = true;
             gerarBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
 
             try {
-                // Faz a chamada para o nosso backend Flask
                 const response = await fetch('/api/gerar-relatorio', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -117,14 +114,17 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    resultadoEl.value = data.relatorio;
+                    // ✅ ALTERAÇÃO: Usando .innerHTML para exibir o relatório com formatação
+                    resultadoEl.innerHTML = data.relatorio;
                     copiarBtn.style.display = 'block';
                 } else {
-                    resultadoEl.value = `Erro ao gerar relatório: ${data.error}`;
+                    // ✅ ALTERAÇÃO: Usando .innerHTML para exibir a mensagem de erro
+                    resultadoEl.innerHTML = `Erro ao gerar relatório: ${data.error}`;
                     copiarBtn.style.display = 'none';
                 }
             } catch (error) {
-                resultadoEl.value = `Erro de conexão com o servidor: ${error}`;
+                // ✅ ALTERAÇÃO: Usando .innerHTML para exibir a mensagem de erro
+                resultadoEl.innerHTML = `Erro de conexão com o servidor: ${error}`;
                 copiarBtn.style.display = 'none';
             } finally {
                 gerarBtn.disabled = false;
@@ -133,8 +133,10 @@
         });
 
         copiarBtn.addEventListener('click', () => {
-            resultadoEl.select();
-            navigator.clipboard.writeText(resultadoEl.value).then(() => {
+            // ✅ ALTERAÇÃO: A linha .select() foi removida pois não funciona em <pre>
+            
+            // ✅ ALTERAÇÃO: Usando .innerText para copiar apenas o texto, sem as tags HTML
+            navigator.clipboard.writeText(resultadoEl.innerText).then(() => {
                 copiarBtn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
                 setTimeout(() => {
                     copiarBtn.innerHTML = '<i class="fas fa-copy"></i> Copiar Texto';
