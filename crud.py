@@ -183,7 +183,6 @@ def get_usuarios():
 @admin_required
 def create_usuario():
     data = request.get_json()
-    # ... (código de criação de usuário) ...
     if not all([data.get('username'), data.get('nome_completo'), data.get('password'), data.get('nivel_acesso')]):
         return jsonify({'erro': 'Todos os campos são obrigatórios.'}), 400
     db_session = SessionLocal()
@@ -205,6 +204,74 @@ def create_usuario():
     finally:
         db_session.close()
 
+# --- INÍCIO DAS NOVAS ROTAS DE EDIÇÃO E EXCLUSÃO ---
+
+@app.route('/api/usuarios/<int:user_id>', methods=['PUT'])
+@login_required
+@admin_required
+def update_usuario(user_id):
+    usuario_logado = session.get('username')
+    db_session = SessionLocal()
+    try:
+        usuario_para_editar = db_session.query(UsuarioTb).filter_by(id=user_id).first()
+        if not usuario_para_editar:
+            return jsonify({'erro': 'Usuário não encontrado.'}), 404
+
+        if usuario_para_editar.username == usuario_logado:
+            return jsonify({'erro': 'Não é permitido editar o próprio usuário logado.'}), 403
+
+        data = request.get_json()
+        
+        # Atualiza os campos
+        if 'nome_completo' in data:
+            usuario_para_editar.nome_completo = data['nome_completo']
+        if 'nivel_acesso' in data:
+            usuario_para_editar.nivel_acesso = data['nivel_acesso']
+        
+        # Atualiza a senha, se uma nova for fornecida
+        if data.get('password'):
+            usuario_para_editar.set_password(data['password'])
+        
+        db_session.commit()
+        return jsonify({'mensagem': f'Usuário {usuario_para_editar.username} atualizado com sucesso!'})
+
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
+    finally:
+        db_session.close()
+
+@app.route('/api/usuarios/<int:user_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_usuario(user_id):
+    usuario_logado = session.get('username')
+    db_session = SessionLocal()
+    try:
+        usuario_para_deletar = db_session.query(UsuarioTb).filter_by(id=user_id).first()
+        
+        if not usuario_para_deletar:
+            return jsonify({'erro': 'Usuário não encontrado.'}), 404
+        
+        # A verificação mais importante: impede que o usuário logado se delete
+        if usuario_para_deletar.username == usuario_logado:
+            return jsonify({'erro': 'Não é permitido excluir o próprio usuário logado.'}), 403 # 403 Forbidden
+            
+        username_deletado = usuario_para_deletar.username
+        db_session.delete(usuario_para_deletar)
+        db_session.commit()
+        
+        return jsonify({'mensagem': f'Usuário {username_deletado} excluído com sucesso!'})
+        
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
+    finally:
+        db_session.close()
+
+# --- FIM DAS NOVAS ROTAS ---
+
+
 # --- ROTAS EXISTENTES ---
 @app.route("/relatorios")
 @login_required
@@ -214,7 +281,6 @@ def relatorios_page():
 @app.route("/pedidos", methods=["GET"])
 @login_required
 def get_pedidos():
-    # ... (código para obter pedidos) ...
     filtro_tab = request.args.get('filtro')
     busca_texto = request.args.get('busca')
     busca_mes = request.args.get('mes')
@@ -276,11 +342,9 @@ def gerar_relatorio_api():
         if not start_date_str or not end_date_str:
             return jsonify({'error': 'As datas de início e fim são obrigatórias.'}), 400
 
-        # Converte as datas para o formato do banco de dados
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, tzinfo=fuso_brasilia)
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=fuso_brasilia)
         
-        # --- As queries continuam as mesmas ---
         query_realizadas = text("""
             SELECT
                 CASE WHEN p.equipamento ILIKE '%teravix%' THEN 'OP' ELSE 'PV' END as tipo,
@@ -322,20 +386,16 @@ def gerar_relatorio_api():
             elif row['status'] == 'Em Montagem':
                 dados['montagem'][row['tipo']] = {'pedidos': row['total_pedidos'], 'unidades': row['total_unidades']}
         
-        # --- 4. Formata o texto do relatório COM TAGS HTML ---
         data_formatada = datetime.strptime(end_date_str, '%Y-%m-%d').strftime('%d/%m/%Y')
         if start_date_str != end_date_str:
             data_formatada = f"{datetime.strptime(start_date_str, '%Y-%m-%d').strftime('%d/%m/%Y')} a {data_formatada}"
 
-        # Adicionamos a tag <u> para sublinhar a data
         relatorio_texto = f"Relatório de Atividades - <u>{data_formatada}</u>\n"
         relatorio_texto += "=" * 40 + "\n\n"
 
-        # Seção: Atividades Realizadas (com tags <strong> e <u>)
         relatorio_texto += "<strong><u>Atividades Realizadas:</u></strong>\n"
         if dados['realizadas']['PV']:
             pv = dados['realizadas']['PV']
-            # Adicionamos espaços no início para o recuo
             relatorio_texto += f"    • {pv['pedidos']} PV com {pv['unidades']} unidades\n"
         if dados['realizadas']['OP']:
             op = dados['realizadas']['OP']
@@ -343,7 +403,6 @@ def gerar_relatorio_api():
         
         relatorio_texto += "\n"
 
-        # Seção: Backlog (com tags <strong> e <u>)
         relatorio_texto += "<strong><u>Backlog:</u></strong>\n"
         if dados['backlog']['PV']:
             pv = dados['backlog']['PV']
@@ -354,7 +413,6 @@ def gerar_relatorio_api():
             
         relatorio_texto += "\n"
 
-        # Seção: Em Montagem (com tags <strong> e <u>)
         relatorio_texto += "<strong><u>Em Montagem:</u></strong>\n"
         if dados['montagem']['PV']:
             pv = dados['montagem']['PV']
@@ -374,7 +432,6 @@ def gerar_relatorio_api():
 @app.route("/pedidos", methods=["POST"])
 @login_required
 def add_pedido():
-    # ... (código para adicionar pedido) ...
     data = request.json
     username = session.get('username', 'Desconhecido')
     data_criacao = datetime.now(fuso_brasilia)
@@ -394,8 +451,6 @@ def add_pedido():
                 {"pedido_id": novo_pedido_id, "status_alterado": data["status_id"], "data_mudanca": data_criacao, "alterado_por": username}
             )
     return jsonify({"mensagem": "Pedido adicionado com sucesso!"}), 201
-
-# --- ROTAS DE API ADICIONADAS PARA CORRIGIR O ERRO ---
 
 @app.route("/status", methods=["GET"])
 @login_required
@@ -472,4 +527,3 @@ def get_historico_pedido(pedido_id):
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
-
