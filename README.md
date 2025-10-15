@@ -1,4 +1,4 @@
-# 📊 Painel de Produção MTEC
+# 📊 Painel de Prioridades
 
 Um sistema completo para gerenciamento de ordens de produção, composto por:
 - **Interface Web** para CRUD de pedidos.  
